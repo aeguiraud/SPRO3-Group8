@@ -5,7 +5,7 @@
 #include <avr/interrupt.h>
 
 // Variable definitions
-uint8_t left = 1; // Variable for prioritizing left or right side in a step (1 = true, 0 = false)
+uint8_t isright = 0; // Variable for prioritizing right or left side in a step (1 = true, 0 = false)
 
 int direction; // Walking direction in degrees
 int timer_overflow = 0;
@@ -23,7 +23,7 @@ void actuate(void); // Function for moving motors to the right positions
 
 int main(){
 
-    TCCR0B |= (1 << CS00) | (1<< CS02); // Set prescaler to 1024 and start Timer0
+    TCCR0B |= (1 << CS00) | (1 << CS02); // Set prescaler to 1024 and start Timer0
 
     while(1){
         calculate();
@@ -39,22 +39,22 @@ void calculate(void){
     float distance_to_actuate = speed*time_elapsed; // Calculate distance to reach before next calculation (in mm)
     step_distance += distance_to_actuate; // Update step_distance
 
-    if(step_distance >= STEP_LENGTH) (left ^= 1); // Change side at the end of step
+    if(step_distance >= STEP_LENGTH) (isright ^= 1); // Toggle side at the end of step
 
     TCCR0B |= (1 << CS00) | (1<< CS02); // Restart Timer0
 
     // Trig calculations here
-    pitch[1 - left] = 0; // Depending on the side, the correct motors are automatically selected
-    pitch[3 - left] = 0;
-    pitch[5 - left] = 0;
+    pitch[0 + isright] = 0; // Depending on the side, the correct motors are automatically selected
+    pitch[2 + isright] = 0;
+    pitch[4 + isright] = 0;
 
-    yaw[1 - left] = 0;
-    yaw[3 - left] = 0;
-    yaw[5 - left] = 0;
+    yaw[0 + isright] = 0;
+    yaw[2 + isright] = 0;
+    yaw[4 + isright] = 0;
 
-    bend[1 - left] = 0;
-    bend[3 - left] = 0;
-    bend[5 - left] = 0;
+    bend[0 + isright] = 0;
+    bend[2 + isright] = 0;
+    bend[4 + isright] = 0;
 
     timer_overflow = 0;
 }
