@@ -5,9 +5,10 @@
 #define USMIN  600 // This is the rounded 'minimum' microsecond length based on the minimum pulse of 150
 #define USMAX  2400 // This is the rounded 'maximum' microsecond length based on the maximum pulse of 600
 #define SERVO_FREQ 50 // Analog servos run at ~50 Hz updates
+#define PITCH_SCALER 1.5
 
 #define PUT_DOWN 0
-#define PROPELL 1
+#define PROPEL 1
 #define LIFT_UP 2
 
 // #include <Arduino.h>
@@ -34,22 +35,24 @@ int timer_overflow = 0;
 float speed = 5; // Walking speed in mm/s
 float step_distance = 0; // Distance Gort. has traveled since the start of the step
 
-// float pitch[6]; // Motor step_distances for pitch (up down shoulder motion)
-// float yaw[6]; // Motor step_distances for yaw (forward and back)
-// float bend[6]; // Motor step_distances for bending the knee
+float pitch[6]; // Motor step_distances for pitch (up down shoulder motion)
+float yaw[6]; // Motor step_distances for yaw (forward and back)
+float bend[6]; // Motor step_distances for bending the knee
 
-typedef struct{
-	float yaw;
-	float pitch;
-	float bend;
-}leg_t;
+// typedef struct{
+// 	float yaw;
+// 	float pitch;
+// 	float bend;
+// }leg_t;
 
-leg_t legs[6];
-
+// leg_t legs[6];
 
 
 void calculate(void);
 void actuate(void);
+
+void leg_back(uint8_t);
+void propel(uint8_t);
 
 
 void setup(){
@@ -70,121 +73,90 @@ void setup(){
 }
 
 void loop(){
-    // Motors are grouped by function, not leg
-    // Serial.println(timer_overflow);
+		// Motors are grouped by function, not leg
+		// Serial.println(timer_overflow);
 
-    // step_distance = 0;
-    // while(step_distance <= STEP_LENGTH){
-      float time_elapsed = (TCNT2 + timer_overflow*1024)*0.000064; // Load time elapsed since last calculation (accounting for overflow by addig the max value of Timer0 timer_overflow times)
-      timer_overflow = 0;
-      float distance_to_actuate = speed*time_elapsed; // Calculate distance to reach before next calculation (in mm)
-      step_distance += distance_to_actuate; // Update step_distance
+		// step_distance = 0;
+		// while(step_distance <= STEP_LENGTH){
+		float time_elapsed = (TCNT2 + timer_overflow*1024)*0.000064; // Load time elapsed since last calculation (accounting for overflow by addig the max value of Timer0 timer_overflow times)
+		timer_overflow = 0;
+		float distance_to_actuate = speed*time_elapsed; // Calculate distance to reach before next calculation (in mm)
+		step_distance += distance_to_actuate; // Update step_distance
 
-			calculate();
+		calculate();
 
-      if(step_distance >= STEP_LENGTH) {
-				isright ^= 1; // Toggle side
-        step_state++;
-        step_distance = 0;
-      }
+		if(step_distance >= STEP_LENGTH) {
+			isright ^= 1; // Toggle side
+			step_state++;
+			step_distance = 0;
+		}
 
-      actuate();
+      	actuate();
   
 
-      TCCR2B |= (1 << CS22) | (1<< CS21) | (1 << CS20); // Restart Timer0
+      	TCCR2B |= (1 << CS22) | (1<< CS21) | (1 << CS20); // Restart Timer0
     // }
 
 }
 
 void calculate(void){
-  	switch (step_state%3){
-        case PUT_DOWN:
-          // yaw[0 + isright] = asin(((-step_distance) + (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with positive values
-					// yaw[2 + isright] = asin(((-step_distance) + (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Might receive different calculations later
-					// yaw[4 + isright] = asin(((-step_distance) + (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with positive values
-          // pitch[0 + isright] = 2.5*yaw[0 + isright]; // random scaler
-					// pitch[2 + isright] = 2.5*yaw[2 + isright];
-					// pitch[4 + isright] = 2.5*yaw[4 + isright];
+	for(int i=0; i<3; i++){
+		leg_back(2*i + isright); // goes until 4 + isright
+		propel(2*i + (1 - isright)); // goes until 4 + isright on every other loop
+	}
+	if((step_distance >= STEP_LENGTH/2) && step_state == 2) step_state++;
 
-					legs[0 + isright].yaw = asin(((-step_distance) + (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with positive values
-					legs[2 + isright].yaw = asin(((-step_distance) + (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with positive values
-					legs[4 + isright].yaw = asin(((-step_distance) + (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with positive values
-					legs[0 + isright].pitch = 2.5*legs[0 + isright].yaw;
-					legs[2 + isright].pitch = 2.5*legs[2 + isright].yaw;
-					legs[4 + isright].pitch = 2.5*legs[4 + isright].yaw;
-          break;
-        
-        case PROPELL:
-          // yaw[0 + isright] = asin((step_distance - (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with negative values
-					// yaw[2 + isright] = asin((step_distance - (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with negative values
-					// yaw[4 + isright] = asin((step_distance - (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with negative values
-
-					legs[0 + isright].yaw = asin((step_distance - (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with negative values
-					legs[2 + isright].yaw = asin((step_distance - (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with negative values
-					legs[4 + isright].yaw = asin((step_distance - (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with negative values
-          break;
-
-        case LIFT_UP:
-          // yaw[0 + isright] = asin(((-step_distance) + (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with positive values
-					// yaw[2 + isright] = asin(((-step_distance) + (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with positive values
-					// yaw[4 + isright] = asin(((-step_distance) + (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with positive values
-          // pitch[0 + isright] = (-2.5)*yaw[0 + isright]; // random scaler
-					// pitch[2 + isright] = (-2.5)*yaw[2 + isright];
-					// pitch[4 + isright] = (-2.5)*yaw[4 + isright];
-
-					legs[0 + isright].yaw = asin(((-step_distance) + (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with positive values
-					legs[2 + isright].yaw = asin(((-step_distance) + (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with positive values
-					legs[4 + isright].yaw = asin(((-step_distance) + (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with positive values
-					legs[0 + isright].pitch = (-2.5)*legs[0 + isright].yaw; // random scaler
-					legs[2 + isright].pitch = (-2.5)*legs[2 + isright].yaw; // random scaler
-					legs[4 + isright].pitch = (-2.5)*legs[4 + isright].yaw; // random scaler
-					
-          if(step_distance >= STEP_LENGTH/2) step_state++;
-          break;
-
-        default:
-          break;
-
-
-		// float bend_offset = cos(yaw[0 + isright])*LEG_LENGTH - cos(0.2*LEG_LENGTH); // - sin(30°)*leg_length
-    // bend[0 + isright] = 2*asin(bend_offset/LEG_LENGTH); // random scaler
-
-		// bend_offset = cos(yaw[2 + isright])*LEG_LENGTH - cos(0.2*LEG_LENGTH); // - sin(30°)*leg_length
-		// bend[2 + isright] = 2*asin(bend_offset/LEG_LENGTH); // random scaler
-
-		// bend_offset = cos(yaw[4 + isright])*LEG_LENGTH - cos(0.2*LEG_LENGTH); // - sin(30°)*leg_length
-		// bend[4 + isright] = 2*asin(bend_offset/LEG_LENGTH); // random scaler
-
-		float bend_offset = cos(legs[0 + isright].yaw)*LEG_LENGTH - cos(0.2*LEG_LENGTH); // - sin(30°)*leg_length
-    legs[0 + isright].bend = 2*asin(bend_offset/LEG_LENGTH); // random scaler
-
-		bend_offset = cos(legs[2 + isright].yaw)*LEG_LENGTH - cos(0.2*LEG_LENGTH); // - sin(30°)*leg_length
-    legs[2 + isright].bend = 2*asin(bend_offset/LEG_LENGTH); // random scaler
-
-		bend_offset = cos(legs[2 + isright].yaw)*LEG_LENGTH - cos(0.2*LEG_LENGTH); // - sin(30°)*leg_length
-    legs[2 + isright].bend = 2*asin(bend_offset/LEG_LENGTH); // random scaler
+	Serial.print("step_state: ");
+	Serial.print(step_state%3);
+	Serial.print("     step_distance: ");
+	Serial.print(step_distance);
+	Serial.print("     yaw[0]: ");
+	Serial.print(yaw[0]);
+	Serial.print("     pitch[0]: ");
+	Serial.print(pitch[0]);
+	Serial.print("     bend[0]: ");
+	Serial.print(bend[0]);
+	Serial.print("     pitch[1]: ");
+	Serial.println(pitch[1]);
 }
+
+void leg_back(uint8_t leg_number){
+
+	if((step_state%3) == 2){ // lift up
+		yaw[leg_number] = asin(((-step_distance) + (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with positive values
+		pitch[leg_number] = (-PITCH_SCALER)*yaw[leg_number]; // random scaler
+		// pitch[leg_number] = yaw[leg_number];
+	}
+	else{ // put down
+		yaw[leg_number] = asin(((-step_distance) + (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with positive values
+		pitch[leg_number] = PITCH_SCALER*yaw[leg_number];
+		// pitch[leg_number] = yaw[leg_number];
+	}
+
+	float bend_offset = cos(yaw[leg_number])*LEG_LENGTH - cos(0.2)*LEG_LENGTH; // - sin(30°)*leg_length
+    bend[leg_number] = 2*asin(bend_offset/LEG_LENGTH); // random scaler
+}
+
+void propel(uint8_t leg_number){
+	yaw[leg_number] = asin((step_distance - (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with negative values
+
+	float bend_offset = cos(yaw[leg_number])*LEG_LENGTH - cos(0.2)*LEG_LENGTH; // - sin(30°)*leg_length
+    bend[leg_number] = 2*asin(bend_offset/LEG_LENGTH); // random scaler
 }
 
 void actuate(void){
 
-		for(int i=0; i<3; i++){
-			// yaw[2*i + isright] = yaw[2*i + isright]*(SERVOMAX - SERVOMIN)/PI + 240;
-			// pitch[2*i + isright] = pitch[2*i + isright]*(SERVOMAX - SERVOMIN)/PI + 300;
-			// bend[2*i + isright] = bend[2*i + isright]*(SERVOMAX - SERVOMIN)/PI + 220;
-
-			legs[2*i + isright].yaw = legs[2*i + isright].yaw*(SERVOMAX - SERVOMIN)/PI + 240;
-			legs[2*i + isright].pitch = legs[2*i + isright].pitch*(SERVOMAX - SERVOMIN)/PI + 300;
-			legs[2*i + isright].bend = legs[2*i + isright].bend*(SERVOMAX - SERVOMIN)/PI + 220;
-			
-			// if((yaw[2*i + isright] < SERVOMAX) && (yaw[2*i + isright] > SERVOMIN)) pwm.setPWM(0, 0, yaw[2*i + isright]);
-			// if((pitch[2*i + isright] < SERVOMAX) && (pitch[2*i + isright] > SERVOMIN)) pwm.setPWM(1, 0, pitch[2*i + isright]);
-			// if((bend[2*i + isright] < SERVOMAX) && (bend[2*i + isright] > SERVOMIN)) pwm.setPWM(2, 0, bend[2*i + isright]);
-
-			if((legs[2*i + isright].yaw < SERVOMAX) && (legs[2*i + isright].yaw > SERVOMIN)) pwm.setPWM(0, 0, legs[2*i + isright].yaw);
-			if((legs[2*i + isright].pitch < SERVOMAX) && (legs[2*i + isright].pitch > SERVOMIN)) pwm.setPWM(1, 0, legs[2*i + isright].pitch);
-			if((legs[2*i + isright].bend < SERVOMAX) && (legs[2*i + isright].bend > SERVOMIN)) pwm.setPWM(2, 0, legs[2*i + isright].bend);
-		}
+	for(int j=0; j<6; j++){
+		yaw[j] = yaw[j]*(SERVOMAX - SERVOMIN)/PI + 240;
+		pitch[j] = pitch[j]*(SERVOMAX - SERVOMIN)/PI + 300;
+		bend[j] = bend[j]*(SERVOMAX - SERVOMIN)/PI + 220;
+	}
+	for(int k=0; k<5; k++){
+		if((yaw[k] < SERVOMAX) && (yaw[k] > SERVOMIN)) pwm.setPWM(3*k, 0, yaw[k]);
+		if((pitch[k] < SERVOMAX) && (pitch[k] > SERVOMIN)) pwm.setPWM(3*k+1, 0, pitch[k]);
+		if((bend[k] < SERVOMAX) && (bend[k] > SERVOMIN)) pwm.setPWM(3*k+2, 0, bend[k]);
+	}
+  
 }
 
 ISR(TIMER2_OVF_vect){ // On Timer0 overflow
