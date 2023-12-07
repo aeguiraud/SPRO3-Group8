@@ -28,7 +28,7 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 uint8_t servonum = 0;
 
 uint8_t isright = 0; // Variable for prioritizing left or right side in a step (1 = true, 0 = false)
-uint8_t step_state = 1; // 0,1,2,3
+uint8_t step_state = PROPEL; // 0,1,2
 
 int timer_overflow = 0;
 
@@ -74,22 +74,18 @@ void setup(){
 
 void loop(){
 		// Motors are grouped by function, not leg
-		// Serial.println(timer_overflow);
-
-		// step_distance = 0;
-		// while(step_distance <= STEP_LENGTH){
 		float time_elapsed = (TCNT2 + timer_overflow*1024)*0.000064; // Load time elapsed since last calculation (accounting for overflow by addig the max value of Timer0 timer_overflow times)
 		timer_overflow = 0;
 		float distance_to_actuate = speed*time_elapsed; // Calculate distance to reach before next calculation (in mm)
 		step_distance += distance_to_actuate; // Update step_distance
-
-		calculate();
 
 		if(step_distance >= STEP_LENGTH) {
 			isright ^= 1; // Toggle side
 			step_state++;
 			step_distance = 0;
 		}
+
+		calculate();
 
       	actuate();
   
@@ -104,44 +100,44 @@ void calculate(void){
 		leg_back(2*i + isright); // goes until 4 + isright
 		propel(2*i + (1 - isright)); // goes until 4 + isright on every other loop
 	}
-	if((step_distance >= STEP_LENGTH/2) && step_state == 2) step_state++;
+	if(step_distance >= STEP_LENGTH/2) step_state = 0;
 
-	Serial.print("step_state: ");
-	Serial.print(step_state%3);
-	Serial.print("     step_distance: ");
-	Serial.print(step_distance);
-	Serial.print("     yaw[0]: ");
-	Serial.print(yaw[0]);
-	Serial.print("     pitch[0]: ");
-	Serial.print(pitch[0]);
-	Serial.print("     bend[0]: ");
-	Serial.print(bend[0]);
-	Serial.print("     pitch[1]: ");
-	Serial.println(pitch[1]);
+	// Serial.print("step_state: ");
+	// Serial.print(step_state);
+	// Serial.print("     step_distance: ");
+	// Serial.print(step_distance);
+	// Serial.print("     yaw[0]: ");
+	// Serial.print(yaw[0]);
+	// Serial.print("     pitch[0]: ");
+	// Serial.print(pitch[0]);
+	// Serial.print("     bend[0]: ");
+	// Serial.print(bend[0]);
+	// Serial.print("     pitch[1]: ");
+	// Serial.println(pitch[1]);
 }
 
 void leg_back(uint8_t leg_number){
 
-	if((step_state%3) == 2){ // lift up
-		yaw[leg_number] = asin(((-step_distance) + (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with positive values
+	yaw[leg_number] = asin(((-step_distance) + (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with positive values
+
+	if(step_state == LIFT_UP){ // lift up
 		pitch[leg_number] = (-PITCH_SCALER)*yaw[leg_number]; // random scaler
 		// pitch[leg_number] = yaw[leg_number];
 	}
 	else{ // put down
-		yaw[leg_number] = asin(((-step_distance) + (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with positive values
 		pitch[leg_number] = PITCH_SCALER*yaw[leg_number];
 		// pitch[leg_number] = yaw[leg_number];
 	}
 
-	float bend_offset = cos(yaw[leg_number])*LEG_LENGTH - cos(0.2)*LEG_LENGTH; // - sin(30°)*leg_length
-    bend[leg_number] = 2*asin(bend_offset/LEG_LENGTH); // random scaler
+	float bend_offset = cos(yaw[leg_number])*LEG_LENGTH - 43.3013; // cos(yaw[leg_number])*LEG_LENGTH - cos(0.52)*LEG_LENGTH
+    bend[leg_number] = asin(bend_offset/LEG_LENGTH); // random scaler
 }
 
 void propel(uint8_t leg_number){
 	yaw[leg_number] = asin((step_distance - (float)STEP_LENGTH/2)/(float)LEG_LENGTH); // Start with negative values
 
-	float bend_offset = cos(yaw[leg_number])*LEG_LENGTH - cos(0.2)*LEG_LENGTH; // - sin(30°)*leg_length
-    bend[leg_number] = 2*asin(bend_offset/LEG_LENGTH); // random scaler
+	float bend_offset = cos(yaw[leg_number])*LEG_LENGTH - 43.3013; // cos(yaw[leg_number])*LEG_LENGTH - cos(0.52)*LEG_LENGTH
+    bend[leg_number] = asin(bend_offset/LEG_LENGTH); // random scaler
 }
 
 void actuate(void){
