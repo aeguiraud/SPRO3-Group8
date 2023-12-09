@@ -1,8 +1,16 @@
-#define SERVOMIN  240 // This is the 'minimum' pulse length count (out of 4096)
-#define SERVOMAX  410 // This is the 'maximum' pulse length count (out of 4096)
+#define SERVOMIN  150 // This is the 'minimum' pulse length count (out of 4096)
+#define SERVOMAX  500 // This is the 'maximum' pulse length count (out of 4096)
 #define USMIN  600 // This is the rounded 'minimum' microsecond length based on the minimum pulse of 150
 #define USMAX  2400 // This is the rounded 'maximum' microsecond length based on the maximum pulse of 600
 #define SERVO_FREQ 50 // Analog servos run at ~50 Hz updates
+
+// tested yaw limits: 340-500
+// tested pitch limits: 150-230
+// tested bend limits: 170-370
+
+// yaw: -40°, 30°
+// pitch: -20°, 20°
+// bend: -60°, 25°
 
 #include <stdio.h>
 #include <Wire.h>
@@ -28,12 +36,12 @@ void setup(){
 }
 
 void loop(){
-  for(int i=0; i<12; i++){
-    if((240 + i*10 >= SERVOMIN) && (240 + i*10 <= SERVOMAX)) pwm.setPWM(0, 0, 240 + i*10);
-    Serial.print("pulselength: ");
-    Serial.println(240 + i*10);
-    delay(2000);
-  }
-
-
+  // for(int i=0; i<30; i++){
+  //   if((SERVOMIN + i*10 >= SERVOMIN) && (SERVOMIN + i*10 <= SERVOMAX)) pwm.setPWM(0, 0, SERVOMIN + i*10);
+  //   Serial.print("pulselength: ");
+  //   Serial.println(SERVOMIN + i*10);
+  //   delay(2000);
+  // }
+  pwm.setPWM(0, 0, 370);
+  
 }

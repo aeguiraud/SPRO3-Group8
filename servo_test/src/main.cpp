@@ -4,6 +4,12 @@
 #define LEG_DISTANCE 70 // Vertical distance between separate legs in mm
 #define DELTA 50 // Horizontal distanc between robot center and leg tips
 #define SERVOMIN  240 // This is the 'minimum' pulse length count (out of 4096)
+#define YAWMIN 340
+#define YAWMAX 500
+#define PITCHMIN 150
+#define PITCHMAX 230
+#define BENDMIN 170
+#define BENDMAX	370
 #define SERVOMAX  410 // This is the 'maximum' pulse length count (out of 4096)
 #define SERVO_FREQ 50 // Analog servos run at ~50 Hz updates
 #define PITCH_SCALER 1.5
@@ -29,7 +35,7 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 uint8_t isright = 0; // Variable for prioritizing left or right side in a step (1 = true, 0 = false)
 uint8_t step_state = PROPEL; // 0,1,2
 uint8_t neg; // Multiplication factor for turning
-uint8_t turning = 0; // Whether Gort. is turning. 0 = not, -1 = left, 1 = right
+uint8_t turning = 1; // Whether Gort. is turning. 0 = not, -1 = left, 1 = right
 
 int timer_overflow = 0;
 
@@ -93,7 +99,6 @@ void loop(){
 
 void calculate(void){
 	for(int i=0; i<3; i++){
-		neg = -1;
 		leg_back(2*i + isright); // goes until 4 + isright
 		propel(2*i + (1 - isright)); // goes until 4 + isright on every other loop
 	}
@@ -125,6 +130,7 @@ void leg_back(uint8_t leg_number){
 	phi = step_distance/R;
 	
 	if((turning < 0 && leg_number > 2) || (turning > 0 && leg_number < 3)) neg = 1;
+	else neg = -1;
 
 	if(!turning){
 		yaw[leg_number] = asin(((-step_distance) + (float)STEP_LENGTH/2)/(float)THIGH_LENGTH); // Start with positive values
@@ -204,14 +210,14 @@ void propel(uint8_t leg_number){
 void actuate(void){
 
 	for(int j=0; j<6; j++){
-		yaw[j] = yaw[j]*(SERVOMAX - SERVOMIN)/PI + 240;
-		pitch[j] = pitch[j]*(SERVOMAX - SERVOMIN)/PI + 300;
-		bend[j] = bend[j]*(SERVOMAX - SERVOMIN)/PI + 220;
+		yaw[j] = yaw[j]*(YAWMAX - YAWMIN)/(70*PI/180) + YAWMIN; // Range: -40°, 30°
+		pitch[j] = pitch[j]*(PITCHMAX - PITCHMIN)/(40*PI/180) + PITCHMIN; // Range: -20°, 20°
+		bend[j] = bend[j]*(BENDMAX - BENDMIN)/(85*PI/180) + BENDMIN; // Range: -60°, 25°
 	}
 	for(int k=0; k<5; k++){
-		if((yaw[k] < SERVOMAX) && (yaw[k] > SERVOMIN)) pwm.setPWM(3*k, 0, yaw[k]);
-		if((pitch[k] < SERVOMAX) && (pitch[k] > SERVOMIN)) pwm.setPWM(3*k+1, 0, pitch[k]);
-		if((bend[k] < SERVOMAX) && (bend[k] > SERVOMIN)) pwm.setPWM(3*k+2, 0, bend[k]);
+		if((yaw[k] < YAWMAX) && (yaw[k] > YAWMIN)) pwm.setPWM(3*k, 0, yaw[k]);
+		if((pitch[k] < PITCHMAX) && (pitch[k] > PITCHMIN)) pwm.setPWM(3*k+1, 0, pitch[k]);
+		if((bend[k] < BENDMAX) && (bend[k] > BENDMIN)) pwm.setPWM(3*k+2, 0, bend[k]);
 	}
   
 }
