@@ -33,7 +33,8 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
 
 uint8_t isright = 0; // Variable for prioritizing left or right side in a step (1 = true, 0 = false)
-uint8_t step_state = PROPEL; // 0,1,2
+uint8_t L_step_state = PROPEL; // 0,1,2
+uint8_t R_step_state = LIFT_UP; // 0,1,2
 uint8_t neg; // Multiplication factor for turning
 uint8_t turning = 1; // Whether Gort. is turning. 0 = not, -1 = left, 1 = right
 
@@ -75,24 +76,23 @@ void setup(){
 }
 
 void loop(){
-		// Motors are grouped by function, not leg
-		float time_elapsed = (TCNT2 + timer_overflow*1024)*0.000064; // Load time elapsed since last calculation (accounting for overflow by addig the max value of Timer0 timer_overflow times)
-		timer_overflow = 0;
-		float distance_to_actuate = speed*time_elapsed; // Calculate distance to reach before next calculation (in mm)
-		step_distance += distance_to_actuate; // Update step_distance
+	// Motors are grouped by function, not leg
+	float time_elapsed = (TCNT2 + timer_overflow*1024)*0.000064; // Load time elapsed since last calculation (accounting for overflow by addig the max value of Timer0 timer_overflow times)
+	timer_overflow = 0;
+	float distance_to_actuate = speed*time_elapsed; // Calculate distance to reach before next calculation (in mm)
+	step_distance += distance_to_actuate; // Update step_distance
 
-		if(step_distance >= STEP_LENGTH) {
-			isright ^= 1; // Toggle side
-			step_state++;
-			step_distance = 0;
-		}
+	if(step_distance >= STEP_LENGTH) {
+		isright ^= 1; // Toggle side
+		L_step_state++;
+		R_step_state++;
+		step_distance = 0;
+	}
 
-		calculate();
+	calculate();
+	actuate();
 
-      	actuate();
-  
-
-      	TCCR2B |= (1 << CS22) | (1<< CS21) | (1 << CS20); // Restart Timer0
+	TCCR2B |= (1 << CS22) | (1<< CS21) | (1 << CS20); // Restart Timer0
     // }
 
 }
@@ -102,57 +102,57 @@ void calculate(void){
 		leg_back(2*i + isright); // goes until 4 + isright
 		propel(2*i + (1 - isright)); // goes until 4 + isright on every other loop
 	}
-	if(step_distance >= STEP_LENGTH/2) step_state = 0;
+	// if((step_distance >= STEP_LENGTH/2) && (L_step_state == LIFT_UP)) (L_step_state = PUT_DOWN);
+	if(step_distance >= STEP_LENGTH/2){
+		if(L_step_state == LIFT_UP) (L_step_state = PUT_DOWN);
+		if(R_step_state == LIFT_UP) (R_step_state = PUT_DOWN);
+	}
 
-	// Serial.print("step_state: ");
-	// Serial.print(step_state);
-	// Serial.print("     step_distance: ");
-	// Serial.print(step_distance);
-	// Serial.print("     yaw[0]: ");
-	// Serial.print(yaw[0]);
-	// Serial.print("     pitch[0]: ");
-	// Serial.print(pitch[0]);
-	// Serial.print("     bend[0]: ");
-	// Serial.print(bend[0]);
-	// Serial.print("     pitch[1]: ");
-	// Serial.println(pitch[1]);
+	Serial.print("L_step_state: ");
+	Serial.print(L_step_state);
+	Serial.print("     R_step_state: ");
+	Serial.print(R_step_state);
+	Serial.print("     step_distance: ");
+	Serial.print(step_distance);
+	Serial.print("     yaw[0]: ");
+	Serial.print(yaw[0]);
+	Serial.print("     pitch[0]: ");
+	Serial.print(pitch[0]);
+	Serial.print("     bend[0]: ");
+	Serial.print(bend[0]);
+	Serial.print("     pitch[1]: ");
+	Serial.println(pitch[1]);
 }
 
 void leg_back(uint8_t leg_number){
-	float alpha; // Leg-specific turning angle in radian
-	float phi; // Turning angle in radian
-	float r; // Leg-specific turning radius in mm
-	float rho;
-	float legs_x; //Leg-specific x-position from origin while turning
-	float legs_y; //Leg-specific y-position from origin while turning
+
 	float bend_offset;
 
 	phi = step_distance/R;
 	
 	if((turning < 0 && leg_number > 2) || (turning > 0 && leg_number < 3)) neg = 1;
-	else neg = -1;
+	else (neg = -1);
 
 	if(!turning){
 		yaw[leg_number] = asin(((-step_distance) + (float)STEP_LENGTH/2)/(float)THIGH_LENGTH); // Start with positive values
-
-		if(step_state == LIFT_UP){ // lift up
-			pitch[leg_number] = (-PITCH_SCALER)*yaw[leg_number]; // random scaler
-			// pitch[leg_number] = yaw[leg_number];
-		}
-		else{ // put down
-			pitch[leg_number] = PITCH_SCALER*yaw[leg_number];
-			// pitch[leg_number] = yaw[leg_number];
-		}
 
 		bend_offset = cos(yaw[leg_number])*FORELEG_LENGTH - 43.3013; // cos(yaw[leg_number])*LEG_LENGTH - cos(0.52)*LEG_LENGTH
 		bend[leg_number] = asin(bend_offset/FORELEG_LENGTH);
 	}
 
-	if(turning){
+	else{ // Turning
+	
+		float alpha; // Leg-specific turning angle in radian
+		float phi; // Turning angle in radian
+		float r; // Leg-specific turning radius in mm
+		float rho;
+		float legs_x; //Leg-specific x-position from origin while turning
+		float legs_y; //Leg-specific y-position from origin while turning
+
 		alpha = atan(LEG_DISTANCE/(R + neg*DELTA));
 
-		if(sin(alpha) != 0) r = LEG_DISTANCE/sin(alpha);
-		else r = R + neg*DELTA;
+		if(sin(alpha) != 0) (r = LEG_DISTANCE/sin(alpha));
+		else (r = R + neg*DELTA);
 
 		phi += alpha;
 
@@ -165,21 +165,23 @@ void leg_back(uint8_t leg_number){
 		bend_offset = rho - FORELEG_LENGTH;
 		bend[leg_number] = asin(bend_offset/FORELEG_LENGTH);
 	}
+
+	if((L_step_state == LIFT_UP) || (R_step_state == LIFT_UP)){ // lift up
+		pitch[leg_number] = (-PITCH_SCALER)*yaw[leg_number]; // random scaler
+	}
+	else{ // put down
+		pitch[leg_number] = PITCH_SCALER*yaw[leg_number];
+	}
 }
 
 void propel(uint8_t leg_number){
-	float alpha; // Leg-specific turning angle in radian
-	float phi; // Turning angle in radian
-	float r; // Leg-specific turning radius in mm
-	float rho;
-	float legs_x; //Leg-specific x-position from origin while turning
-	float legs_y; //Leg-specific y-position from origin while turning
+
 	float bend_offset;
 
 	phi = step_distance/R;
 
 	if((turning < 0 && leg_number > 2) || (turning > 0 && leg_number < 3)) neg = 1;
-	else neg = -1;
+	else (neg = -1);
 
 	if(!turning){
 		yaw[leg_number] = asin((step_distance - (float)STEP_LENGTH/2)/(float)THIGH_LENGTH); // Start with negative values
@@ -188,11 +190,19 @@ void propel(uint8_t leg_number){
 		bend[leg_number] = asin(bend_offset/FORELEG_LENGTH); // random scaler
 	}
 
-	if(turning){
+	else{ // Turning
+
+		float alpha; // Leg-specific turning angle in radian
+		float phi; // Turning angle in radian
+		float r; // Leg-specific turning radius in mm
+		float rho;
+		float legs_x; //Leg-specific x-position from origin while turning
+		float legs_y; //Leg-specific y-position from origin while turning
+
 		alpha = atan(LEG_DISTANCE/(R + neg*DELTA));
 
-		if(sin(alpha) != 0) r = LEG_DISTANCE/sin(alpha);
-		else r = R + neg*DELTA;
+		if(sin(alpha) != 0) (r = LEG_DISTANCE/sin(alpha));
+		else (r = R + neg*DELTA);
 
 		phi += alpha;
 
