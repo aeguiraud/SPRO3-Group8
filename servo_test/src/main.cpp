@@ -6,10 +6,10 @@
 #define SERVOMIN  240 // This is the 'minimum' pulse length count (out of 4096)
 #define YAWMIN 340
 #define YAWMAX 500
-#define PITCHMIN 150
-#define PITCHMAX 230
-#define BENDMIN 170
-#define BENDMAX	370
+#define PITCHMIN 200
+#define PITCHMAX 250
+#define BENDMIN 230
+#define BENDMAX	350
 #define SERVOMAX  410 // This is the 'maximum' pulse length count (out of 4096)
 #define SERVO_FREQ 50 // Analog servos run at ~50 Hz updates
 #define PITCH_SCALER 1.5
@@ -28,11 +28,11 @@
 
 #include <Adafruit_PWMServoDriver.h>
 
-// called this way, it uses the default address 0x40
+// Called this way, it uses the default address 0x40
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
 
-uint8_t isright = 0; // Variable for prioritizing left or right side in a step (1 = true, 0 = false)
+uint8_t isright = 1; // Variable for prioritizing left or right side in a step (1 = true, 0 = false)
 uint8_t L_step_state = PROPEL; // 0,1,2
 uint8_t R_step_state = LIFT_UP; // 0,1,2
 uint8_t neg; // Multiplication factor for turning
@@ -45,7 +45,7 @@ float step_distance = 0; // Distance Gort. has traveled since the start of the s
 float R = 1000; // Turning radius in mm
 float phi;
 
-float pitch[6]; // Motor step_distances for pitch (up down shoulder motion)
+float pitch[6] = {0, 0, 0, 0, 0, 0}; // Motor step_distances for pitch (up down shoulder motion)
 float yaw[6]; // Motor step_distances for yaw (forward and back)
 float bend[6]; // Motor step_distances for bending the knee
 float leg_pos[6];
@@ -99,8 +99,9 @@ void loop(){
 
 void calculate(void){
 	for(int i=0; i<3; i++){
-		leg_back(2*i + isright); // goes until 4 + isright
-		propel(2*i + (1 - isright)); // goes until 4 + isright on every other loop
+		propel(2*i + (1 - isright)); // Goes until 4 + isright on every other loop
+		leg_back(2*i + isright); // Goes until 4 + isright
+		
 	}
 	// if((step_distance >= STEP_LENGTH/2) && (L_step_state == LIFT_UP)) (L_step_state = PUT_DOWN);
 	if(step_distance >= STEP_LENGTH/2){
@@ -141,9 +142,8 @@ void leg_back(uint8_t leg_number){
 	}
 
 	else{ // Turning
-	
+
 		float alpha; // Leg-specific turning angle in radian
-		float phi; // Turning angle in radian
 		float r; // Leg-specific turning radius in mm
 		float rho;
 		float legs_x; //Leg-specific x-position from origin while turning
@@ -166,12 +166,10 @@ void leg_back(uint8_t leg_number){
 		bend[leg_number] = asin(bend_offset/FORELEG_LENGTH);
 	}
 
-	if((L_step_state == LIFT_UP) || (R_step_state == LIFT_UP)){ // lift up
-		pitch[leg_number] = (-PITCH_SCALER)*yaw[leg_number]; // random scaler
+	if(((L_step_state == LIFT_UP) && !(leg_number%2)) || ((R_step_state == LIFT_UP) && (leg_number%2))){ // Lift up
+		pitch[leg_number] = (-(float)PITCH_SCALER)*yaw[leg_number]; // Random scaler
 	}
-	else{ // put down
-		pitch[leg_number] = PITCH_SCALER*yaw[leg_number];
-	}
+	else pitch[leg_number] = (float)PITCH_SCALER*yaw[leg_number]; // Put down
 }
 
 void propel(uint8_t leg_number){
@@ -187,13 +185,12 @@ void propel(uint8_t leg_number){
 		yaw[leg_number] = asin((step_distance - (float)STEP_LENGTH/2)/(float)THIGH_LENGTH); // Start with negative values
 
 		float bend_offset = cos(yaw[leg_number])*FORELEG_LENGTH - 43.3013; // cos(yaw[leg_number])*LEG_LENGTH - cos(0.52)*LEG_LENGTH
-		bend[leg_number] = asin(bend_offset/FORELEG_LENGTH); // random scaler
+		bend[leg_number] = asin(bend_offset/FORELEG_LENGTH); // Random scaler
 	}
 
 	else{ // Turning
 
-		float alpha; // Leg-specific turning angle in radian
-		float phi; // Turning angle in radian
+		float alpha; // Leg-specific turning angle in radian|
 		float r; // Leg-specific turning radius in mm
 		float rho;
 		float legs_x; //Leg-specific x-position from origin while turning
@@ -218,19 +215,21 @@ void propel(uint8_t leg_number){
 }
 
 void actuate(void){
+	float pitch_pulse[6];
 
 	for(int j=0; j<6; j++){
 		yaw[j] = yaw[j]*(YAWMAX - YAWMIN)/(70*PI/180) + YAWMIN; // Range: -40°, 30°
-		pitch[j] = pitch[j]*(PITCHMAX - PITCHMIN)/(40*PI/180) + PITCHMIN; // Range: -20°, 20°
-		bend[j] = bend[j]*(BENDMAX - BENDMIN)/(85*PI/180) + BENDMIN; // Range: -60°, 25°
+		pitch_pulse[j] = pitch[j]*(PITCHMAX - PITCHMIN)/((0-20)*PI/180) + PITCHMIN;
+		bend[j] = bend[j]*(BENDMAX - BENDMIN)/((15+20)*PI/180) + BENDMIN; // Range: -60°, 25°
 	}
 	for(int k=0; k<5; k++){
 		if((yaw[k] < YAWMAX) && (yaw[k] > YAWMIN)) pwm.setPWM(3*k, 0, yaw[k]);
-		if((pitch[k] < PITCHMAX) && (pitch[k] > PITCHMIN)) pwm.setPWM(3*k+1, 0, pitch[k]);
+		if((pitch_pulse[k] < PITCHMAX) && (pitch_pulse[k] > PITCHMIN)) pwm.setPWM(3*k+1, 0, pitch_pulse[k]);
 		if((bend[k] < BENDMAX) && (bend[k] > BENDMIN)) pwm.setPWM(3*k+2, 0, bend[k]);
 	}
   
 }
+
 
 ISR(TIMER2_OVF_vect){ // On Timer0 overflow
     timer_overflow++;
