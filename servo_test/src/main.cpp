@@ -48,7 +48,10 @@ float phi;
 float pitch[6] = {0, 0, 0, 0, 0, 0}; // Motor step_distances for pitch (up down shoulder motion)
 float yaw[6]; // Motor step_distances for yaw (forward and back)
 float bend[6]; // Motor step_distances for bending the knee
-float leg_pos[6];
+float leg_pos[2][6] = {
+	{DELTA, DELTA, DELTA, -DELTA, -DELTA, -DELTA},
+	{LEG_DISTANCE, 0, -LEG_DISTANCE, LEG_DISTANCE, 0, -LEG_DISTANCE}
+};
 
 
 void calculate(void);
@@ -129,7 +132,7 @@ void leg_back(uint8_t leg_number){
 
 	float bend_offset;
 
-	phi = step_distance/R;
+	phi = (-step_distance - STEP_DISTANCE/2)/R;
 	
 	if((turning < 0 && leg_number > 2) || (turning > 0 && leg_number < 3)) neg = 1;
 	else (neg = -1);
@@ -146,21 +149,20 @@ void leg_back(uint8_t leg_number){
 		float alpha; // Leg-specific turning angle in radian
 		float r; // Leg-specific turning radius in mm
 		float rho;
-		float legs_x; //Leg-specific x-position from origin while turning
-		float legs_y; //Leg-specific y-position from origin while turning
+		float leg_x; //Leg-specific x-position from origin while turning
+		float leg_y; //Leg-specific y-position from origin while turning
 
 		alpha = atan(LEG_DISTANCE/(R + neg*DELTA));
 
-		if(sin(alpha) != 0) (r = LEG_DISTANCE/sin(alpha));
-		else (r = R + neg*DELTA);
+		r = (LEG_DISTANCE/(sin(alpha)+!sin(alpha))) * !(!sin(alpha)) + R + neg*DELTA;
 
 		phi += alpha;
 
-		legs_x = ((R + neg*DELTA)*cos(phi) - R);
-		legs_y = (R + neg*DELTA)*sin(phi);
+		leg_x = ((R + neg*DELTA)*cos(phi) - R);
+		leg_y = (R + neg*DELTA)*sin(phi);
 
-		yaw[leg_number] = atan((legs_y - leg_pos[leg_number])/(legs_x - leg_pos[leg_number]));
-		rho = sqrt(pow((legs_x - leg_pos[leg_number]), 2) + pow((legs_y - leg_pos[leg_number]), 2));
+		yaw[leg_number] = atan((leg_y - leg_pos[1][leg_number])/(leg_x - leg_pos[0][leg_number]));
+		rho = sqrt(pow((leg_x - leg_pos[0][leg_number]), 2) + pow((leg_y - leg_pos[1][leg_number]), 2));
 
 		bend_offset = rho - FORELEG_LENGTH;
 		bend[leg_number] = asin(bend_offset/FORELEG_LENGTH);
@@ -176,7 +178,7 @@ void propel(uint8_t leg_number){
 
 	float bend_offset;
 
-	phi = step_distance/R;
+	phi = (step_distance - STEP_LENGTH/2)/R;
 
 	if((turning < 0 && leg_number > 2) || (turning > 0 && leg_number < 3)) neg = 1;
 	else (neg = -1);
@@ -193,8 +195,8 @@ void propel(uint8_t leg_number){
 		float alpha; // Leg-specific turning angle in radian|
 		float r; // Leg-specific turning radius in mm
 		float rho;
-		float legs_x; //Leg-specific x-position from origin while turning
-		float legs_y; //Leg-specific y-position from origin while turning
+		float leg_x; //Leg-specific x-position from origin while turning
+		float leg_y; //Leg-specific y-position from origin while turning
 
 		alpha = atan(LEG_DISTANCE/(R + neg*DELTA));
 
@@ -203,11 +205,11 @@ void propel(uint8_t leg_number){
 
 		phi += alpha;
 
-		legs_x = ((R + neg*DELTA)*cos(phi) - R);
-		legs_y = (R + neg*DELTA)*sin(phi);
+		leg_x = ((R + neg*DELTA)*cos(phi) - R);
+		leg_y = (R + neg*DELTA)*sin(phi);
 
-		yaw[leg_number] = atan((legs_y - leg_pos[leg_number])/(legs_x - leg_pos[leg_number]));
-		rho = sqrt(pow((legs_x - leg_pos[leg_number]), 2) + pow((legs_y - leg_pos[leg_number]), 2));
+		yaw[leg_number] = atan((leg_y - leg_pos[1][leg_number])/(leg_x - leg_pos[0][leg_number]));
+		rho = sqrt(pow((leg_x - leg_pos[0][leg_number]), 2) + pow((leg_y - leg_pos[1][leg_number]), 2));
 
 		bend_offset = rho - FORELEG_LENGTH;
 		bend[leg_number] = asin(bend_offset/FORELEG_LENGTH);
