@@ -1,14 +1,14 @@
-#define SERVOMIN  230 // This is the 'minimum' pulse length count (out of 4096)
-#define SERVOMAX  350 // This is the 'maximum' pulse length count (out of 4096)
+#define SERVOMIN  370 // This is the 'minimum' pulse length count (out of 4096)
+#define SERVOMAX  490 // This is the 'maximum' pulse length count (out of 4096)
 #define USMIN  600 // This is the rounded 'minimum' microsecond length based on the minimum pulse of 150
 #define USMAX  2400 // This is the rounded 'maximum' microsecond length based on the maximum pulse of 600
 #define SERVO_FREQ 50 // Analog servos run at ~50 Hz updates
 
-// tested yaw limits: 340-500
+// tested yaw limits: 370-490
 // tested pitch limits: 200-250
 // tested bend limits: 230-350
 
-// yaw: -40°, 30°
+// yaw: -30°, 30°
 // pitch: 20°, 0°
 // bend: -20°, 15°
 
@@ -22,6 +22,8 @@
 #include <Adafruit_PWMServoDriver.h>
 
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
+
+int value = 200;
 
 void setup(){
   Serial.begin(9600);
@@ -37,11 +39,23 @@ void setup(){
 
 void loop(){
   // for(int i=0; i*10 < SERVOMAX; i++){
-  //   if((SERVOMIN + i*10 >= SERVOMIN) && (SERVOMIN + i*10 <= SERVOMAX)) pwm.setPWM(0, 0, SERVOMIN + i*10);
+  //   if((SERVOMIN + i*10 >= SERVOMIN) && (SERVOMIN + i*10 <= SERVOMAX)) pwm.setPWM(3, 0, SERVOMIN + i*10);
   //   Serial.print("pulselength: ");
   //   Serial.println(SERVOMIN + i*10);
   //   delay(1000);
+  //   // pwm.setPWM(3, 0, 340);
   // }
-  pwm.setPWM(0, 0, 200);
+  // for(int j=490; j > 370; j-=10){
+  //   if((SERVOMIN + j >= SERVOMIN) && (SERVOMIN + j <= SERVOMAX)) pwm.setPWM(3, 0, SERVOMIN + j);
+  //   Serial.print("pulselength: ");
+  //   Serial.println(SERVOMIN + j);
+  //   delay(1000);
+  //   // pwm.setPWM(3, 0, 340);
+  // }
+
+  pwm.setPWM(0, 0, 490);
+  pwm.setPWM(4, 0, 490);
+  // delay(1000);
+  
   
 }
