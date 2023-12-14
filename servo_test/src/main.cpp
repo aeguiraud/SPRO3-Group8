@@ -2,7 +2,7 @@
 #define FORELEG_LENGTH 60 // mm
 #define THIGH_LENGTH 65 // mm
 #define LEG_DISTANCE 70 // Vertical distance between separate legs in mm
-#define DELTA 50 // Horizontal distanc between robot center and leg tips
+#define DELTA 115 // Horizontal distanc between robot center and leg tips
 #define SERVOMIN  240 // This is the 'minimum' pulse length count (out of 4096)
 #define YAWMIN 370
 #define YAWMAX 490
@@ -33,9 +33,9 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
 
 uint8_t isright = 1; // Variable for prioritizing left or right side in a step (1 = true, 0 = false)
-uint8_t L_step_state = PROPEL; // 0,1,2
-uint8_t R_step_state = LIFT_UP; // 0,1,2
-uint8_t turning = 0; // Whether Gort. is turning. 0 = not, -1 = left, 1 = right
+uint8_t L_step_state = LIFT_UP; // 0,1,2
+uint8_t R_step_state = PROPEL; // 0,1,2
+uint8_t turning = -1; // Whether Gort. is turning. 0 = not, 1 = left, -1 = right
 
 int timer_overflow = 0;
 int neg; // Multiplication factor for turning
@@ -48,10 +48,6 @@ float phi;
 float pitch[6]; // Motor step_distances for pitch (up down shoulder motion)
 float yaw[6]; // Motor step_distances for yaw (forward and back)
 float bend[6]; // Motor step_distances for bending the knee
-float leg_pos[2][6] = {
-	{-DELTA, -DELTA, -DELTA, DELTA, DELTA, DELTA},
-	{LEG_DISTANCE, 0, -LEG_DISTANCE, LEG_DISTANCE, 0, -LEG_DISTANCE}
-};
 
 void calculate(void);
 void actuate(void);
@@ -101,8 +97,8 @@ void loop(){
 
 void calculate(void){
 	for(int i=0; i<3; i++){
-		propel(2*i + (1 - isright)); // Goes until 4 + isright on every other loop
-		leg_back(2*i + isright); // Goes until 4 + isright
+		propel(2*i + isright); // Goes until 4 + isright on every other loop
+		leg_back(2*i + (1 - isright)); // Goes until 4 + isright
 		
 	}
 	// if((step_distance >= STEP_LENGTH/2) && (L_step_state == LIFT_UP)) (L_step_state = PUT_DOWN);
@@ -115,34 +111,90 @@ void calculate(void){
 	Serial.print(L_step_state);
 	Serial.print("     R_step_state: ");
 	Serial.print(R_step_state);
-	Serial.print("     step_distance: ");
-	Serial.print(step_distance);
-	Serial.print("     yaw[0]: ");
-	Serial.print(yaw[0]);
-	Serial.print("     pitch[0]: ");
-	Serial.print(pitch[0]);
-	Serial.print("     bend[0]: ");
-	Serial.print(bend[0]);
-	Serial.print("     pitch[1]: ");
-	Serial.println(pitch[1]);
+	// Serial.print("     step_distance: ");
+	// Serial.print(step_distance);
+	// Serial.print("     yaw[0]: ");
+	// Serial.print(yaw[0]);
+	// Serial.print("     pitch[0]: ");
+	// Serial.print(pitch[0]);
+	// Serial.print("     bend[0]: ");
+	// Serial.print(bend[0]);
+	// Serial.print("     pitch[1]: ");
+	// Serial.println(pitch[1]);
 
-	
-	// Serial.print("     yaw[1]: ");
-	// Serial.print(yaw[1]);
-	// Serial.print("     yaw[2]: ");
-	// Serial.print(yaw[2]);
-	// Serial.print("     yaw[3]: ");
-	// Serial.print(yaw[3]);
-	// Serial.print("     yaw[4]: ");
-	// Serial.print(yaw[4]);
-	// Serial.print("     yaw[5]: ");
-	// Serial.print(yaw[5]);
-	// Serial.print("\n");
+	Serial.print("	   yaw[0]: ");
+	Serial.print(yaw[0]);
+	Serial.print("     yaw[1]: ");
+	Serial.print(yaw[1]);
+	Serial.print("     yaw[2]: ");
+	Serial.print(yaw[2]);
+	Serial.print("     yaw[3]: ");
+	Serial.print(yaw[3]);
+	Serial.print("     yaw[4]: ");
+	Serial.print(yaw[4]);
+	Serial.print("     yaw[5]: ");
+	Serial.print(yaw[5]);
+	Serial.print("\n");
 }
 
 void propel(uint8_t leg_number){
 
 	float bend_offset;
+
+	int leg_pos[2][6] = {
+		{turning*DELTA, turning*DELTA, turning*DELTA, -1*turning*DELTA, -1*turning*DELTA, -1*turning*DELTA},
+		{LEG_DISTANCE, 0, -LEG_DISTANCE, LEG_DISTANCE, 0, -LEG_DISTANCE}
+	};
+
+	phi = -(step_distance - (float)STEP_LENGTH/2)/R;
+
+	// Serial.print("     Max's thing: ");
+	// Serial.print(step_distance - STEP_LENGTH);
+
+	if((turning < 0 && leg_number > 2) || (turning > 0 && leg_number < 3)) neg = 1;
+	else (neg = -1);
+
+	if(!turning){
+		yaw[leg_number] = atan((step_distance - (float)STEP_LENGTH/2)/(float)THIGH_LENGTH); // Start with negative values
+
+		float bend_offset = cos(yaw[leg_number])*FORELEG_LENGTH - 43.3013; // cos(yaw[leg_number])*LEG_LENGTH - cos(0.52)*LEG_LENGTH
+		bend[leg_number] = asin(bend_offset/FORELEG_LENGTH); // Random scaler
+	}
+
+	else{ // Turning
+
+		float alpha; // Leg-specific turning angle in radian|
+		float rho; // Radius of joint to leg tip
+		float r; // Leg-specific turning radius
+		float leg_x; //Leg-specific x-position from origin while turning
+		float leg_y; //Leg-specific y-position from origin while turning
+
+		alpha = atan(leg_pos[1][leg_number]/(R + neg*DELTA));
+
+		phi += alpha;
+
+		if(!sin(alpha)) r = LEG_DISTANCE/sin(alpha);
+		else r = R + neg*DELTA;
+
+		leg_x = turning*(r*cos(phi) - R*cos(phi));
+		leg_y = r*sin(phi);
+
+		yaw[leg_number] = atan((leg_y - leg_pos[1][leg_number])/(leg_x - leg_pos[0][leg_number]));
+		// yaw[leg_number] = atan((leg_y - 0)/(leg_x - (-DELTA)));
+		rho = sqrt(pow((leg_x - leg_pos[0][leg_number]), 2) + pow((leg_y - leg_pos[1][leg_number]), 2));
+
+		bend[leg_number] = asin((rho - FORELEG_LENGTH)/FORELEG_LENGTH);
+	}
+}
+
+void leg_back(uint8_t leg_number){
+
+	float bend_offset;
+
+	int leg_pos[2][6] = {
+		{turning*DELTA, turning*DELTA, turning*DELTA, -1*turning*DELTA, -1*turning*DELTA, -1*turning*DELTA},
+		{LEG_DISTANCE, 0, -LEG_DISTANCE, LEG_DISTANCE, 0, -LEG_DISTANCE}
+	};
 
 	phi = (step_distance - (float)STEP_LENGTH/2)/R;
 
@@ -162,7 +214,8 @@ void propel(uint8_t leg_number){
 	else{ // Turning
 
 		float alpha; // Leg-specific turning angle in radian|
-		float rho;
+		float rho; // Radius of joint to leg tip
+		float r; // Leg-specific turning radius
 		float leg_x; //Leg-specific x-position from origin while turning
 		float leg_y; //Leg-specific y-position from origin while turning
 
@@ -170,54 +223,17 @@ void propel(uint8_t leg_number){
 
 		phi += alpha;
 
-		leg_x = ((R + neg*DELTA)*cos(phi) - R);
-		leg_y = (R + neg*DELTA)*sin(phi);
+		if(!sin(alpha)) r = LEG_DISTANCE/sin(alpha);
+		else r = R + neg*DELTA;
+
+		leg_x = turning*(r*cos(phi) - R*cos(phi));
+		leg_y = r*sin(phi);
 
 		yaw[leg_number] = atan((leg_y - leg_pos[1][leg_number])/(leg_x - leg_pos[0][leg_number]));
 		// yaw[leg_number] = atan((leg_y - 0)/(leg_x - (-DELTA)));
 		rho = sqrt(pow((leg_x - leg_pos[0][leg_number]), 2) + pow((leg_y - leg_pos[1][leg_number]), 2));
 
-		bend_offset = rho - FORELEG_LENGTH;
-		bend[leg_number] = asin(bend_offset/FORELEG_LENGTH);
-	}
-}
-
-void leg_back(uint8_t leg_number){
-
-	float bend_offset;
-
-	phi = -(step_distance - STEP_LENGTH/2)/R;
-	
-	if((turning < 0 && leg_number > 2) || (turning > 0 && leg_number < 3)) neg = 1;
-	else (neg = -1);
-
-	if(!turning){
-		yaw[leg_number] = atan(((-step_distance) + (float)STEP_LENGTH/2)/(float)THIGH_LENGTH); // Start with positive values
-
-		bend_offset = cos(yaw[leg_number])*FORELEG_LENGTH - 43.3013; // cos(yaw[leg_number])*LEG_LENGTH - cos(0.52)*LEG_LENGTH
-		bend[leg_number] = asin(bend_offset/FORELEG_LENGTH);
-	}
-
-	else{ // Turning
-
-		float alpha; // Leg-specific turning angle in radian
-		float rho;
-		float leg_x; //Leg-specific x-position from origin while turning
-		float leg_y; //Leg-specific y-position from origin while turning
-
-		alpha = atan(leg_pos[1][leg_number]/(R + neg*DELTA));
-
-		phi += alpha;
-
-		leg_x = ((R + neg*DELTA)*cos(phi) - R);
-		leg_y = (R + neg*DELTA)*sin(phi);
-
-		yaw[leg_number] = atan((leg_y - leg_pos[1][leg_number])/(leg_x - leg_pos[0][leg_number]));
-		// yaw[leg_number] = atan((leg_y - 0)/(leg_x - (-DELTA)));
-		rho = sqrt(pow((leg_x - leg_pos[0][leg_number]), 2) + pow((leg_y - leg_pos[1][leg_number]), 2));
-
-		bend_offset = rho - FORELEG_LENGTH;
-		bend[leg_number] = asin(bend_offset/FORELEG_LENGTH);
+		bend[leg_number] = asin((rho - FORELEG_LENGTH)/FORELEG_LENGTH);
 	}
 
 	if(((L_step_state == LIFT_UP) && !(leg_number%2)) || ((R_step_state == LIFT_UP) && (leg_number%2))){ // Lift up
