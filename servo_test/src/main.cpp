@@ -2,7 +2,8 @@
 #define FORELEG_LENGTH 60 // mm
 #define THIGH_LENGTH 65 // mm
 #define LEG_DISTANCE 70 // Vertical distance between separate legs in mm
-#define DELTA 115 // Horizontal distanc between robot center and leg tips
+#define DELTA 50 // Horizontal distanc between robot center and leg tips
+#define X_OFFSET 115 // Distance between robot center and leg tips
 #define SERVOMIN  240 // This is the 'minimum' pulse length count (out of 4096)
 #define YAWMIN 370
 #define YAWMAX 490
@@ -35,10 +36,11 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 uint8_t isright = 1; // Variable for prioritizing left or right side in a step (1 = true, 0 = false)
 uint8_t L_step_state = LIFT_UP; // 0,1,2
 uint8_t R_step_state = PROPEL; // 0,1,2
-uint8_t turning = -1; // Whether Gort. is turning. 0 = not, 1 = left, -1 = right
+
 
 int timer_overflow = 0;
 int neg; // Multiplication factor for turning
+int turning = -1; // Whether Gort. is turning. 0 = not, 1 = left, -1 = right
 
 float speed = 15; // Walking speed in mm/s
 float step_distance = 0; // Distance Gort. has traveled since the start of the step
@@ -107,10 +109,10 @@ void calculate(void){
 		if(R_step_state == LIFT_UP) (R_step_state = PUT_DOWN);
 	}
 
-	Serial.print("L_step_state: ");
-	Serial.print(L_step_state);
-	Serial.print("     R_step_state: ");
-	Serial.print(R_step_state);
+	// Serial.print("L_step_state: ");
+	// Serial.print(L_step_state);
+	// Serial.print("     R_step_state: ");
+	// Serial.print(R_step_state);
 	// Serial.print("     step_distance: ");
 	// Serial.print(step_distance);
 	// Serial.print("     yaw[0]: ");
@@ -151,7 +153,7 @@ void propel(uint8_t leg_number){
 	// Serial.print("     Max's thing: ");
 	// Serial.print(step_distance - STEP_LENGTH);
 
-	if((turning < 0 && leg_number > 2) || (turning > 0 && leg_number < 3)) neg = 1;
+	if((turning < 0 && leg_number < 3) || (turning > 0 && leg_number > 2)) neg = 1;
 	else (neg = -1);
 
 	if(!turning){
@@ -169,15 +171,23 @@ void propel(uint8_t leg_number){
 		float leg_x; //Leg-specific x-position from origin while turning
 		float leg_y; //Leg-specific y-position from origin while turning
 
-		alpha = atan(leg_pos[1][leg_number]/(R + neg*DELTA));
+		alpha = atan(leg_pos[1][leg_number]/(R + neg*X_OFFSET));
 
 		phi += alpha;
 
-		if(!sin(alpha)) r = LEG_DISTANCE/sin(alpha);
-		else r = R + neg*DELTA;
+		if(sin(alpha) != 0) r = LEG_DISTANCE/sin(alpha);
+		else r = R + neg*X_OFFSET;
 
 		leg_x = turning*(r*cos(phi) - R*cos(phi));
 		leg_y = r*sin(phi);
+
+		// Serial.print("     leg_x: ");
+		// Serial.print(leg_x);
+		// Serial.print("     leg_y: ");
+		// Serial.print(leg_y);
+		// Serial.print("     r: ");
+		// Serial.println(r);
+		
 
 		yaw[leg_number] = atan((leg_y - leg_pos[1][leg_number])/(leg_x - leg_pos[0][leg_number]));
 		// yaw[leg_number] = atan((leg_y - 0)/(leg_x - (-DELTA)));
@@ -201,7 +211,7 @@ void leg_back(uint8_t leg_number){
 	// Serial.print("     Max's thing: ");
 	// Serial.print(step_distance - STEP_LENGTH);
 
-	if((turning < 0 && leg_number > 2) || (turning > 0 && leg_number < 3)) neg = 1;
+	if((turning < 0 && leg_number < 3) || (turning > 0 && leg_number > 2)) neg = 1;
 	else (neg = -1);
 
 	if(!turning){
@@ -219,12 +229,12 @@ void leg_back(uint8_t leg_number){
 		float leg_x; //Leg-specific x-position from origin while turning
 		float leg_y; //Leg-specific y-position from origin while turning
 
-		alpha = atan(leg_pos[1][leg_number]/(R + neg*DELTA));
+		alpha = atan(leg_pos[1][leg_number]/(R + neg*X_OFFSET));
 
 		phi += alpha;
 
-		if(!sin(alpha)) r = LEG_DISTANCE/sin(alpha);
-		else r = R + neg*DELTA;
+		if(sin(alpha) != 0) r = LEG_DISTANCE/sin(alpha);
+		else r = R + neg*X_OFFSET;
 
 		leg_x = turning*(r*cos(phi) - R*cos(phi));
 		leg_y = r*sin(phi);
