@@ -1,3 +1,6 @@
+#define BAUDRATE 57600       // The baudrate that we want to use
+#define BAUD_PRESCALER (((F_CPU / (BAUDRATE * 16UL))) -1) // This calculates the BAUD_Prescaler for us
+
 #define STEP_LENGTH 50 // Max length of a step in mm
 #define FORELEG_LENGTH 60 // mm
 #define THIGH_LENGTH 65 // mm
@@ -78,8 +81,13 @@ void setup(){
   	TIMSK2 |= (1 << TOIE2); // Overflow interrupt enable
 	speed *= forward;
 
-
+	UBRR0H = (uint8_t)(BAUD_PRESCALER>>8);
+	UBRR0L = (uint8_t)(BAUD_PRESCALER);
 	UCSR0B |= (1 << RXCIE0) | (1 << RXEN0); // RX receibe interrupt enable and RX receive enable
+
+	UCSR0C = (1 << UCSZ01) | (1<<UCSZ00); /* 8-bit data, no parity*/
+	UCSR0B = (1 << RXEN0) | (1 << TXEN0);   /* Enable RX and TX */
+
 
 	sei(); // Enable global interrupts
 }
@@ -297,7 +305,7 @@ ISR(TIMER2_OVF_vect){ // On Timer0 overflow
     timer_overflow++;
 }
 
-ISR(USART_RX_vect){
-	volatile int received_data = UDR0;
+// ISR(USART_RX_vect){
+// 	volatile unsigned char received_data = UDR0;
 
-}
+// }
