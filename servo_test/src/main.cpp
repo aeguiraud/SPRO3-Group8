@@ -62,20 +62,25 @@ void propel(uint8_t);
 
 
 void setup(){
-  Serial.begin(9600);
-  Serial.println("8 channel Servo test!");
+	Serial.begin(9600);
+	Serial.println("8 channel Servo test!");
 
-  pwm.begin();
- 
-  pwm.setOscillatorFrequency(27000000);
-  pwm.setPWMFreq(SERVO_FREQ);  // Analog servos run at ~50 Hz updates
+	pwm.begin();
+	
+	pwm.setOscillatorFrequency(27000000);
+	pwm.setPWMFreq(SERVO_FREQ);  // Analog servos run at ~50 Hz updates
 
-  delay(10);
+  	delay(10);
   
   
-  TCCR2B |= (1 << CS22) | (1<< CS21) | (1 << CS20); // Set prescaler to 1024 and start Timer2
-  TIMSK2 |= (1 << TOIE2); // Overflow interrupt enable
+  	TCCR2B |= (1 << CS22) | (1<< CS21) | (1 << CS20); // Set prescaler to 1024 and start Timer2
+  	TIMSK2 |= (1 << TOIE2); // Overflow interrupt enable
 	speed *= forward;
+
+
+	UCSR0B |= (1 << RXCIE0) | (1 << RXEN0); // RX receibe interrupt enable and RX receive enable
+
+	sei(); // Enable global interrupts
 }
 
 void loop(){
@@ -289,4 +294,9 @@ void actuate(void){
 
 ISR(TIMER2_OVF_vect){ // On Timer0 overflow
     timer_overflow++;
+}
+
+ISR(USART_RX_vect){
+	volatile int received_data = UDR0;
+
 }
