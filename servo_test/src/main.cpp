@@ -39,7 +39,8 @@ uint8_t R_step_state = LIFT_UP; // 0,1,2
 
 int timer_overflow = 0;
 int neg; // Multiplication factor for turning
-int turning = 1; // Whether Gort. is turning. 0 = not, 1 = left, -1 = right
+int turning = -1; // Whether Gort. is turning. 0 = not, 1 = left, -1 = right
+int forward = -1; // Whether Gort. is moving forwards (1) or backwards (-1)
 
 float speed = 15; // Walking speed in mm/s
 float step_distance = 0; // Distance Gort. has traveled since the start of the step
@@ -50,6 +51,7 @@ float pitch[6]; // Motor step_distances for pitch (up down shoulder motion)
 float yaw[6]; // Motor step_distances for yaw (forward and back)
 float bend[6]; // Motor step_distances for bending the knee
 
+int leg_pos_x[2] = {-X_OFFSET, X_OFFSET};
 int leg_pos_y[6] = {LEG_DISTANCE, 0, -LEG_DISTANCE};
 
 void calculate(void);
@@ -73,17 +75,21 @@ void setup(){
   
   TCCR2B |= (1 << CS22) | (1<< CS21) | (1 << CS20); // Set prescaler to 1024 and start Timer2
   TIMSK2 |= (1 << TOIE2); // Overflow interrupt enable
-
+	speed *= forward;
 }
 
 void loop(){
+  	// if(speed < 0) forward = -1;
+  	// else forward = 1;
 	// Motors are grouped by function, not leg
 	float time_elapsed = (TCNT2 + timer_overflow*1024)*0.000064; // Load time elapsed since last calculation (accounting for overflow by addig the max value of Timer0 timer_overflow times)
 	timer_overflow = 0;
 	float distance_to_actuate = speed*time_elapsed; // Calculate distance to reach before next calculation (in mm)
 	step_distance += distance_to_actuate; // Update step_distance
+	// Serial.print("stepdist: ");
+	// Serial.print(step_distance);
 
-	if(step_distance >= STEP_LENGTH) {
+	if((abs(step_distance)) >= STEP_LENGTH) {
 		isright ^= 1; // Toggle side
 		L_step_state++;
 		R_step_state++;
@@ -100,23 +106,23 @@ void loop(){
 
 void calculate(void){
 	for(int i=0; i<3; i++){
-		propel(2*i + (1 - isright)); // Goes until 4 + isright on every other loop
+		propel(02*i + (1 - isright)); // Goes until 4 + isright on every other loop
 		leg_back(2*i + isright); // Goes until 4 + isright
 		
 	}
 	// if((step_distance >= STEP_LENGTH/2) && (L_step_state == LIFT_UP)) (L_step_state = PUT_DOWN);
-	if(step_distance >= STEP_LENGTH/2){
+	if((abs(step_distance)) >= STEP_LENGTH/2){
 		if(L_step_state == LIFT_UP) (L_step_state = PUT_DOWN);
 		if(R_step_state == LIFT_UP) (R_step_state = PUT_DOWN);
 	}
 
-	Serial.print("L_step_state: ");
-	Serial.print(L_step_state);
-	Serial.print("     R_step_state: ");
-	Serial.print(R_step_state);
+	// Serial.print("L_step_state: ");
+	// Serial.print(L_step_state);
+	// Serial.print("     R_step_state: ");
+	// Serial.print(R_step_state);
 	// Serial.print("     step_distance: ");
 	// Serial.print(step_distance);
-	Serial.print("		yaw[0]: ");
+	Serial.print("yaw[0]: ");
 	Serial.print(yaw[0]);
 	// Serial.print("     pitch[0]: ");
 	// Serial.print(pitch[0]);
@@ -140,7 +146,7 @@ void calculate(void){
 
 void propel(uint8_t leg_number){
 
-	phi = -(step_distance - (float)STEP_LENGTH/2)/R;
+	phi = -forward*((abs(step_distance) - (float)STEP_LENGTH/2))/R;
 	// Serial.print("phi: ");
 	// Serial.print(phi);
 
@@ -165,9 +171,7 @@ void propel(uint8_t leg_number){
 	float leg_x; //Leg-specific x-position from origin while turning
 	float leg_y; //Leg-specific y-position from origin while turning
 
-	int leg_pos_x[2] = {-X_OFFSET, X_OFFSET};
-
-	alpha = atan(leg_pos_y[leg_number%3]/(R + neg*DELTA));
+	alpha = (atan(leg_pos_y[leg_number%3]/(R + neg*DELTA)));
 	// Serial.print("	alpha: ");
 	// Serial.print(alpha);
 
@@ -196,16 +200,16 @@ void propel(uint8_t leg_number){
 	// Serial.println(rho);
 
 	bend[leg_number] = asin((rho - FORELEG_LENGTH)/FORELEG_LENGTH);
-	// //// Serial.print("	bend[0]: ");
-	// //// Serial.println(bend[leg_number]);
+	// //Serial.print("	bend[0]: ");
+	// //Serial.println(bend[leg_number]);
 
 }
 
 void leg_back(uint8_t leg_number){
 
-	phi = (step_distance - (float)STEP_LENGTH/2)/R;
-	//// Serial.print("phi: ");
-	//// Serial.print(phi);
+	phi = forward*((abs(step_distance) - (float)STEP_LENGTH/2))/R;
+	// Serial.print("phi: ");
+	// Serial.print(phi);
 
 	// //// Serial.print("     Max's thing: ");
 	// //// Serial.print(step_distance - STEP_LENGTH);
@@ -228,39 +232,37 @@ void leg_back(uint8_t leg_number){
 	float leg_x; //Leg-specific x-position from origin while turning
 	float leg_y; //Leg-specific y-position from origin while turning
 
-	int leg_pos_x[2] = {turning*X_OFFSET, -turning*X_OFFSET};
-
-	alpha = atan(leg_pos_y[leg_number%3]/(R + neg*DELTA));
-	//// Serial.print("	alpha: ");
-	//// Serial.print(alpha);
+	alpha = (atan(leg_pos_y[leg_number%3]/(R + neg*DELTA)));
+	// Serial.print("	alpha: ");
+	// Serial.print(alpha);
 
 	phi += alpha;
-	//// Serial.print("	phi2: ");
-	//// Serial.print(phi);
+	// Serial.print("	phi2: ");
+	// Serial.print(phi);
 
 	if(sin(alpha)) r = abs(LEG_DISTANCE/sin(alpha));
 	else r = R + neg*DELTA;
-	//// Serial.print("	r: ");
-	//// Serial.print(r);
+	// Serial.print("	r: ");
+	// Serial.print(r);
 
 	leg_x = turning*(r*cos(phi) - R*cos(phi));
-	//// Serial.print("	leg_x: ");
-	//// Serial.print(leg_x);
+	// Serial.print("	leg_x: ");
+	// Serial.print(leg_x);
 	leg_y = r*sin(phi);
-	//// Serial.print("	leg_y: ");
-	//// Serial.print(leg_y);
+	// Serial.print("	leg_y: ");
+	// Serial.print(leg_y);
 
 	yaw[leg_number] = atan((leg_y - leg_pos_y[leg_number%3])/(leg_x - leg_pos_x[leg_number/3]));
-	//// Serial.print("	yaw[0]: ");
-	//// Serial.print(yaw[leg_number]);
+	// Serial.print("	yaw[0]: ");
+	// Serial.print(yaw[leg_number]);
 	// yaw[leg_number] = atan((leg_y - 0)/(leg_x - (-DELTA)));
 	rho = sqrt(pow((leg_x - leg_pos_x[leg_number/3]), 2) + pow((leg_y - leg_pos_y[leg_number%3]), 2));
-	//// Serial.print("	rho: ");
-	//// Serial.println(rho);
+	// Serial.print("	rho: ");
+	// Serial.println(rho);
 
 	bend[leg_number] = asin((rho - FORELEG_LENGTH)/FORELEG_LENGTH);
-	// Serial.print("	bend[0]: ");
-	// Serial.println(bend[leg_number]);
+	// //Serial.print("	bend[0]: ");
+	// //Serial.println(bend[leg_number]);
 
 	if(((L_step_state == LIFT_UP) && !(leg_number%2)) || ((R_step_state == LIFT_UP) && (leg_number%2))){ // Lift up
 		pitch[leg_number] = (-(float)PITCH_SCALER)*yaw[leg_number]; // Random scaler
