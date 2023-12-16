@@ -71,6 +71,8 @@ void propel(uint8_t);
 void setup(){
 	Serial.begin(9600);
 	Serial.println("8 channel Servo test!");
+	Serial.begin(9600);
+	Serial.println("8 channel Servo test!");
 
 	pwm.begin();
 
@@ -337,4 +339,9 @@ void rave(){
 
 ISR(TIMER2_OVF_vect){ // On Timer0 overflow
     timer_overflow++;
+}
+
+ISR(USART_RX_vect){
+	volatile int received_data = UDR0;
+
 }
