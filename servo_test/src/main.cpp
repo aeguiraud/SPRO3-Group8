@@ -37,15 +37,16 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 uint8_t isright = 0; // Variable for prioritizing left or right side in a step (1 = right, 0 = left)
 uint8_t L_step_state = PROPEL; // 0,1,2
 uint8_t R_step_state = LIFT_UP; // 0,1,2
-uint8_t raving = 0; // Variable for whether Gort. is raving or not. 0 = not raving, 1 = raving
+uint8_t raving = 1; // Variable for whether Gort. is raving or not. 0 = not raving, 1 = raving
 uint8_t timer_overflow = 0;
 
+int rave_state = 1;
 int neg; // Multiplication factor for turning
 int side; // Multiplication factor for inverting legs. -1 = right, 1 = left
-int turning = -1; // Which direction Gort. is turning. 1 = left, -1 = right
+int turning = 1; // Which direction Gort. is turning. 1 = left, -1 = right
 int forward = 1; // Whether Gort. is moving forwards (1) or backwards (-1)
 
-float speed = 20; // Walking speed in mm/s
+float speed = 21.5; // Walking speed in mm/s
 float step_distance; // Distance Gort. has traveled since the start of the step
 float rave_distance = 0; // Distance Gort. has raved since the start of the rave
 float R = 2000000; // Turning radius in mm. Extremely large when walking straight
@@ -82,16 +83,21 @@ void setup(){
 
 	TCCR2B |= (1 << CS22) | (1<< CS21) | (1 << CS20); // Set prescaler to 1024 and start Timer2
 	TIMSK2 |= (1 << TOIE2); // Overflow interrupt enable
-	speed *= forward; 
 	if(raving) speed = abs(speed);
 	if(speed > 0) step_distance = 0;
-	else step_distance = STEP_LENGTH;
+	else{
+		step_distance = STEP_LENGTH;
+		forward = -1;
+	}
 
 	if(!raving){
 		float temp = PITCHMAX - (abs(step_distance - (float)STEP_LENGTH/2) * PITCH_STEP);
 		for(int m=0;m<6;m++){
 			pitch[m] = temp;
 		}
+	}
+	if(raving){
+		for(int o=0;o<6;o++) yaw[o] = 0;
 	}
 }
 
@@ -112,7 +118,10 @@ void loop(){
 		if(speed > 0) step_distance = 0;
 		else step_distance = STEP_LENGTH;
 	}
-	if(rave_distance >= RAVE_LENGTH) rave_distance = 0;
+	if(rave_distance >= RAVE_LENGTH){
+		rave_distance = 0;
+		rave_state *= -1;
+	}
 
 	if(!raving){
 		calculate();
@@ -207,7 +216,7 @@ void propel(uint8_t leg_number){
 	if(leg_number/3) side = -1;
 	else side = 1;
 
-	yaw[leg_number] = (atan((leg_y - leg_pos_y[leg_number%3])/(leg_x - leg_pos_x[leg_number/3])));
+	if(!raving) yaw[leg_number] = (atan((leg_y - leg_pos_y[leg_number%3])/(leg_x - leg_pos_x[leg_number/3])));
 	// Serial.print("	yaw[0]: ");
 	// Serial.print(yaw[leg_number]);
 	rho = sqrt(pow((leg_x - leg_pos_x[leg_number/3]), 2) + pow((leg_y - leg_pos_y[leg_number%3]), 2));
@@ -262,7 +271,7 @@ void leg_back(uint8_t leg_number){
 	if(leg_number/3) side = -1;
 	else side = 1;
 
-	yaw[leg_number] = (atan((leg_y - leg_pos_y[leg_number%3])/(leg_x - leg_pos_x[leg_number/3])));
+	if(!raving) yaw[leg_number] = (atan((leg_y - leg_pos_y[leg_number%3])/(leg_x - leg_pos_x[leg_number/3])));
 	// Serial.print("	yaw[0]: ");
 	// Serial.print(yaw[leg_number]);
 
@@ -275,10 +284,10 @@ void leg_back(uint8_t leg_number){
 void actuate(void){
 	uint8_t shift = 0;
 	for(int j=0; j<6; j++){
-		if(!raving) yaw[j] = yaw[j]*(YAWMAX - YAWMIN)/(60*PI/180) + (float)(YAWMAX+YAWMIN)/2; // Range: -40°, 30°
+		yaw[j] = yaw[j]*(YAWMAX - YAWMIN)/(60*PI/180) + (float)(YAWMAX+YAWMIN)/2; // Range: -40°, 30°
 		bend[j] = bend[j]*(BENDMAX - BENDMIN)/(35*PI/180) + (float)(BENDMIN+BENDMAX)/2; // Range: -60°, 25°
 
-		if(!raving) if((yaw[j] < YAWMAX) && (yaw[j] > YAWMIN)) pwm.setPWM((3*j)-shift, 0, yaw[j]);
+		if((yaw[j] < YAWMAX) && (yaw[j] > YAWMIN)) pwm.setPWM((3*j)-shift, 0, yaw[j]);
 		if((pitch[j] < PITCHMAX) && (pitch[j] > PITCHMIN)){
 			if(j == 2){
 				pwm.setPWM(1, 0, pitch[j]);
@@ -296,8 +305,9 @@ void actuate(void){
 }
 
 void rave(){
-	bend[0] = bend[1] = bend[2] = asin((rave_distance - RAVE_LENGTH/2)/FORELEG_LENGTH), bend[3] = bend[4] = bend[5] = -bend[0];
-	pitch[0] = pitch[1] = pitch[2] = pitch[3] = pitch[4] = pitch[5] = PITCHMAX - (abs(rave_distance - (float)RAVE_LENGTH/2) * PITCH_RAVE);
+	bend[0] = bend[1] = bend[2] = bend[3] = bend[4] = bend[5] = rave_state*(asin((rave_distance - RAVE_LENGTH/2)/FORELEG_LENGTH));
+	pitch[0] = pitch[1] = pitch[2] = PITCHMAX - (abs(rave_distance - (float)RAVE_LENGTH/2) * PITCH_RAVE);
+	pitch[3] = pitch[4] = pitch[5] = PITCHMIN + (abs(rave_distance - (float)RAVE_LENGTH/2) * PITCH_RAVE);
 
 	// Serial.print("pitch[0]: ");
 	// Serial.print(pitch[0]);
