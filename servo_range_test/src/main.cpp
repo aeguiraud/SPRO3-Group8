@@ -53,8 +53,8 @@ void loop(){
   //   // pwm.setPWM(3, 0, 340);
   // }
 
-  pwm.setPWM(0, 0, 370);
-  pwm.setPWM(4, 0, 370);
+  pwm.setPWM(0, 0, 400);
+  pwm.setPWM(8, 0, 150);
   // delay(1000);
   
   
