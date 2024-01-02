@@ -40,7 +40,7 @@ uint8_t R_step_state = LIFT_UP; // 0,1,2
 uint8_t raving = 1; // Variable for whether Gort. is raving or not. 0 = not raving, 1 = raving
 uint8_t timer_overflow = 0;
 
-int rave_state = 1;
+int rave_state = 0;
 int neg; // Multiplication factor for turning
 int side; // Multiplication factor for inverting legs. -1 = right, 1 = left
 int turning = 1; // Which direction Gort. is turning. 1 = left, -1 = right
@@ -68,8 +68,6 @@ void propel(uint8_t);
 
 
 void setup(){
-	Serial.begin(9600);
-	// Serial.println("8 channel Servo test!");
 	Serial.begin(9600);
 	// Serial.println("8 channel Servo test!");
 
@@ -103,24 +101,25 @@ void setup(){
 
 void loop(){
 
-    if (Serial.available() > 0) {
-    String data = Serial.readStringUntil('\n');
-    int commaIndex = data.indexOf(',');
+    // if (Serial.available() > 0) {
+    // String data = Serial.readStringUntil('\n');
+    // int commaIndex = data.indexOf(',');
 
-    // if (commaIndex == -1 || commaIndex == 0 || commaIndex == data.length() - 1) {
-    //   Serial.println("Error: Invalid data format");
-    //   return;
+    // // if (commaIndex == -1 || commaIndex == 0 || commaIndex == data.length() - 1) {
+    // //   Serial.println("Error: Invalid data format");
+    // //   return;
+    // // }
+
+    // String value1Str = data.substring(0, commaIndex);
+    // String value2Str = data.substring(commaIndex + 1);
+
+    // speed = value1Str.toInt();
+    // R = value2Str.toInt();
+    // if(R<0){
+    //     turning = 1;
+    //     R = abs(R);
     // }
-
-    String value1Str = data.substring(0, commaIndex);
-    String value2Str = data.substring(commaIndex + 1);
-
-    int speed = value1Str.toInt();
-    int R = value2Str.toInt();
-    if(R<0){
-        turning = 1;
-        R = abs(R);
-    }
+    
 
     // if (value1Str.toInt() == 0 && value1Str != "0" || value2Str.toInt() == 0 && value2Str != "0") {
     //   Serial.println("Error: Non-integer data received");
@@ -134,7 +133,7 @@ void loop(){
 
     // // Send back an acknowledgement
     // Serial.println("ACK: Data Received");
-    }
+    // }
 
 	// Motors are grouped by function, not leg
 	float time_elapsed = (TCNT2 + timer_overflow*1024)*0.000064; // Load time elapsed since last calculation (accounting for overflow by addig the max value of Timer0 timer_overflow times)
