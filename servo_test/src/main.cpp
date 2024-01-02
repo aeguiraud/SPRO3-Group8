@@ -37,7 +37,7 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 uint8_t isright = 0; // Variable for prioritizing left or right side in a step (1 = right, 0 = left)
 uint8_t L_step_state = PROPEL; // 0,1,2
 uint8_t R_step_state = LIFT_UP; // 0,1,2
-uint8_t raving = 1; // Variable for whether Gort. is raving or not. 0 = not raving, 1 = raving
+uint8_t raving = 0; // Variable for whether Gort. is raving or not. 0 = not raving, 1 = raving
 uint8_t timer_overflow = 0;
 
 int rave_state = 0;
@@ -101,30 +101,31 @@ void setup(){
 
 void loop(){
 
-    // if (Serial.available() > 0) {
-    // String data = Serial.readStringUntil('\n');
-    // int commaIndex = data.indexOf(',');
+    if (Serial.available() > 0) {
+    String data = Serial.readStringUntil('\n');
+    int commaIndex = data.indexOf(',');
 
-    // // if (commaIndex == -1 || commaIndex == 0 || commaIndex == data.length() - 1) {
-    // //   Serial.println("Error: Invalid data format");
-    // //   return;
-    // // }
+    if (commaIndex == -1 || commaIndex == 0 || commaIndex == data.length() - 1) {
+      Serial.println("Error: Invalid data format");
+      raving = 1;
+	  return;
+    }
 
-    // String value1Str = data.substring(0, commaIndex);
-    // String value2Str = data.substring(commaIndex + 1);
+    String value1Str = data.substring(0, commaIndex);
+    String value2Str = data.substring(commaIndex + 1);
 
-    // speed = value1Str.toInt();
-    // R = value2Str.toInt();
-    // if(R<0){
-    //     turning = 1;
-    //     R = abs(R);
-    // }
+    speed = value1Str.toInt();
+    R = value2Str.toInt();
+    if(R<0){
+        turning = 1;
+        R = abs(R);
+    }
     
 
-    // if (value1Str.toInt() == 0 && value1Str != "0" || value2Str.toInt() == 0 && value2Str != "0") {
-    //   Serial.println("Error: Non-integer data received");
-    //   return;
-    // }
+    if (value1Str.toInt() == 0 && value1Str != "0" || value2Str.toInt() == 0 && value2Str != "0") {
+      Serial.println("Error: Non-integer data received");
+      return;
+    }
 
     // Serial.print("Received Value 1: ");
     // Serial.print(value1);
