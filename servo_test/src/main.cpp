@@ -37,16 +37,16 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 uint8_t isright = 0; // Variable for prioritizing left or right side in a step (1 = right, 0 = left)
 uint8_t L_step_state = PROPEL; // 0,1,2
 uint8_t R_step_state = LIFT_UP; // 0,1,2
-uint8_t raving = 0; // Variable for whether Gort. is raving or not. 0 = not raving, 1 = raving
+uint8_t raving = 1; // Variable for whether Gort. is raving or not. 0 = not raving, 1 = raving
 uint8_t timer_overflow = 0;
 
-int rave_state = 1;
+int rave_state = 0;
 int neg; // Multiplication factor for turning
 int side; // Multiplication factor for inverting legs. -1 = right, 1 = left
 int turning = 1; // Which direction Gort. is turning. 1 = left, -1 = right
 int forward = 1; // Whether Gort. is moving forwards (1) or backwards (-1)
 
-float speed = 40; // Walking speed in mm/s
+float speed = 30; // Walking speed in mm/s
 float step_distance; // Distance Gort. has traveled since the start of the step
 float rave_distance = 0; // Distance Gort. has raved since the start of the rave
 float R = 2000000; // Turning radius in mm. Extremely large when walking straight
@@ -89,8 +89,10 @@ void setup(){
 	}
 
 	if(!raving){
-		for(int m=0;m<3;m++) pitch[m] = PITCHSTART_LEFT;
-		for(int n=3;n<6;n++) pitch[n] = PITCHSTART_RIGHT;
+		float temp = PITCHMAX - (abs(step_distance - (float)STEP_LENGTH/2) * PITCH_STEP);
+		for(int m=0;m<6;m++){
+			pitch[m] = temp;
+		}
 	}
 	if(raving){
 		for(int o=0;o<6;o++) yaw[o] = 0;
@@ -98,7 +100,7 @@ void setup(){
 }
 
 void loop(){
-    
+
     if (Serial.available() > 0) {
     String data = Serial.readStringUntil('\n');
     int commaIndex = data.indexOf(',');
@@ -133,15 +135,16 @@ void loop(){
     // // Send back an acknowledgement
     // Serial.println("ACK: Data Received");
     }
+
 	// Motors are grouped by function, not leg
-	float time_elapsed = (TCNT2 + timer_overflow*256)*0.000064; // Load time elapsed since last calculation (accounting for overflow by addig the max value of Timer0 timer_overflow times)
+	float time_elapsed = (TCNT2 + timer_overflow*1024)*0.000064; // Load time elapsed since last calculation (accounting for overflow by addig the max value of Timer0 timer_overflow times)
 	timer_overflow = 0;
 	float distance_to_actuate = speed*time_elapsed; // Calculate distance to reach before next calculation (in mm)
 	step_distance += distance_to_actuate; // Update step_distance
 	rave_distance += distance_to_actuate;
 	// Serial.print("stepdist: ");
 	// Serial.print(step_distance);
-	
+
 	if((step_distance) >= STEP_LENGTH || step_distance < 0) {
 		isright ^= 1; // Toggle side
 		L_step_state++;
@@ -176,14 +179,47 @@ void calculate(void){
 		if(L_step_state == LIFT_UP) (L_step_state = PUT_DOWN);
 		if(R_step_state == LIFT_UP) (R_step_state = PUT_DOWN);
 	}
+
+	// Serial.print("L_step_state: ");
+	// Serial.print(L_step_state);
+	// Serial.print("     R_step_state: ");
+	// Serial.print(R_step_state);
+	// Serial.print("     step_distance: ");
+	// Serial.print(step_distance);
+	// Serial.print("		yaw[0]: ");
+	// Serial.print(yaw[0]);
+	// Serial.print("     bend[0]: ");
+	// Serial.print(bend[0]);
+
+	
+	// Serial.print("     yaw[1]: ");
+	// Serial.print(yaw[1]);
+	// Serial.print("     yaw[2]: ");
+	// Serial.print(yaw[2]);
+	// Serial.print("     yaw[3]: ");
+	// Serial.print(yaw[3]);
+	// Serial.print("     yaw[4]: ");
+	// Serial.print(yaw[4]);
+	// Serial.print("     yaw[5]: ");
+	// Serial.print(yaw[5]);
+	// Serial.print("		stepdist: ");
+	// Serial.println(step_distance);
+
 }
 
 void propel(uint8_t leg_number){
 
 	phi = -(step_distance - (float)STEP_LENGTH/2)/R;
+	// Serial.print("phi: ");
+	// Serial.print(phi);
+
+	// //// Serial.print("     Max's thing: ");
+	// //// Serial.print(step_distance - STEP_LENGTH);
 
 	if((turning < 0 && leg_number < 3) || (turning > 0 && leg_number > 2)) neg = 1;
 	else (neg = -1);
+	//// Serial.print("	neg: ");
+	//// Serial.print(neg);
 
 	float alpha; // Leg-specific turning angle in radian|
 	float r;
@@ -192,31 +228,54 @@ void propel(uint8_t leg_number){
 	float leg_y; //Leg-specific y-position from origin while turning
 
 	alpha = (atan(leg_pos_y[leg_number%3]/(R + neg*DELTA)));
+	// Serial.print("	alpha: ");
+	// Serial.print(alpha);
 
 	phi += alpha;
+	// Serial.print("	phi2: ");
+	// Serial.print(phi);
 
 	if(sin(alpha)) r = abs(LEG_DISTANCE/sin(alpha));
 	else r = R + neg*DELTA;
+	// Serial.print("	r: ");
+	// Serial.print(r);
 
 	leg_x = turning*(r*cos(phi) - R*cos(phi));
+	// Serial.print("	leg_x: ");
+	// Serial.print(leg_x);
 	leg_y = r*sin(phi);
+	// Serial.print("	leg_y: ");
+	// Serial.print(leg_y);
 
 	if(leg_number/3) side = -1;
 	else side = 1;
 
 	if(!raving) yaw[leg_number] = (atan((leg_y - leg_pos_y[leg_number%3])/(leg_x - leg_pos_x[leg_number/3])));
+	// Serial.print("	yaw[0]: ");
+	// Serial.print(yaw[leg_number]);
 	rho = sqrt(pow((leg_x - leg_pos_x[leg_number/3]), 2) + pow((leg_y - leg_pos_y[leg_number%3]), 2));
+	// Serial.print("	rho: ");
+	// Serial.println(rho);
 
-	bend[leg_number] = asin((rho - THIGH_LENGTH)/FORELEG_LENGTH);
+	bend[leg_number] = asin((rho - FORELEG_LENGTH)/FORELEG_LENGTH);
+	// //// Serial.print("	bend[0]: ");
+	// //// Serial.println(bend[leg_number]);
 
 }
 
 void leg_back(uint8_t leg_number){
 
 	phi = (step_distance - (float)STEP_LENGTH/2)/R;
+	// Serial.print("phi: ");
+	// Serial.print(phi);
+
+	// //// Serial.print("     Max's thing: ");
+	// //// Serial.print(step_distance - STEP_LENGTH);
 
 	if((turning < 0 && leg_number < 3) || (turning > 0 && leg_number > 2)) neg = 1;
 	else (neg = -1);
+	//// Serial.print("	neg: ");
+	//// Serial.print(neg);
 
 	float alpha; // Leg-specific turning angle in radian|
 	float r;
@@ -224,19 +283,31 @@ void leg_back(uint8_t leg_number){
 	float leg_y; //Leg-specific y-position from origin while turning
 
 	alpha = (atan(leg_pos_y[leg_number%3]/(R + neg*DELTA)));
-	
+	// Serial.print("	alpha: ");
+	// Serial.print(alpha);
+
 	phi += alpha;
+	// Serial.print("	phi2: ");
+	// Serial.print(phi);
 
 	if(sin(alpha)) r = abs(LEG_DISTANCE/sin(alpha));
 	else r = R + neg*DELTA;
+	// Serial.print("	r: ");
+	// Serial.print(r);
 
 	leg_x = turning*(r*cos(phi) - R*cos(phi));
+	// Serial.print("	leg_x: ");
+	// Serial.print(leg_x);
 	leg_y = r*sin(phi);
+	// Serial.print("	leg_y: ");
+	// Serial.print(leg_y);
 
 	if(leg_number/3) side = -1;
 	else side = 1;
 
 	if(!raving) yaw[leg_number] = (atan((leg_y - leg_pos_y[leg_number%3])/(leg_x - leg_pos_x[leg_number/3])));
+	// Serial.print("	yaw[0]: ");
+	// Serial.print(yaw[leg_number]);
 
 	if((((L_step_state == LIFT_UP) || (L_step_state == PUT_DOWN)) && !(leg_number%2)) || (((R_step_state == LIFT_UP) || (R_step_state == PUT_DOWN)) && (leg_number%2))){ // Lift up
 		if(side == 1) pitch[leg_number] = PITCHMIN + (abs(step_distance - (float)STEP_LENGTH/2) * PITCH_STEP);
@@ -272,6 +343,33 @@ void rave(){
 	pitch[0] = pitch[1] = pitch[2] = PITCHMAX - (abs(rave_distance - (float)RAVE_LENGTH/2) * PITCH_RAVE);
 	pitch[3] = pitch[4] = pitch[5] = PITCHMIN + (abs(rave_distance - (float)RAVE_LENGTH/2) * PITCH_RAVE);
 
+	// Serial.print("pitch[0]: ");
+	// Serial.print(pitch[0]);
+	// Serial.print("	pitch[1]: ");
+	// Serial.print(pitch[1]);
+	// Serial.print("	pitch[2]: ");
+	// Serial.print(pitch[2]);
+	// Serial.print("	pitch[3]: ");
+	// Serial.print(pitch[3]);
+	// Serial.print("	pitch[4]: ");
+	// Serial.print(pitch[4]);
+	// Serial.print("	pitch[5]: ");
+	// Serial.print(pitch[5]);
+
+	// Serial.print("bend[0]: ");
+	// Serial.print(bend[0]);
+	// Serial.print("	bend[1]: ");
+	// Serial.print(bend[1]);
+	// Serial.print("	bend[2]: ");
+	// Serial.print(bend[2]);
+	// Serial.print("	bend[3]: ");
+	// Serial.print(bend[3]);
+	// Serial.print("	bend[4]: ");
+	// Serial.print(bend[4]);
+	// Serial.print("	bend[5]: ");
+	// Serial.print(bend[5]);
+	// Serial.print("	ravedist: ");
+	// Serial.println(rave_distance);
 }
 
 
