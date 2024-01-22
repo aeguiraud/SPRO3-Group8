@@ -53,8 +53,13 @@ void loop(){
   //   // pwm.setPWM(3, 0, 340);
   // }
 
+<<<<<<< Updated upstream
   pwm.setPWM(0, 0, 370);
   pwm.setPWM(4, 0, 370);
+=======
+  pwm.setPWM(14, 0, 400);
+  // pwm.setPWM(8, 0, 150);
+>>>>>>> Stashed changes
   // delay(1000);
   
   

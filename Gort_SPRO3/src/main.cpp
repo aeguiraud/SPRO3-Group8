@@ -46,7 +46,7 @@ void calculate(void){
     // TCCR0B |= (1 << CS00) | (1<< CS02); // Restart Timer0
 
     // Trig calculations here
-    pitch[1 - left] = 0; // Depending on the side, the correct motors are automatically selected
+    pitch[1 - left] = 0; 
     pitch[3 - left] = 0;
     pitch[5 - left] = 0;
 

@@ -1,26 +1,24 @@
-#define BAUDRATE 57600       // The baudrate that we want to use
-#define BAUD_PRESCALER (((F_CPU / (BAUDRATE * 16UL))) -1) // This calculates the BAUD_Prescaler for us
-
 #define STEP_LENGTH 50 // Max length of a step in mm
-#define FORELEG_LENGTH 60 // mm
-#define THIGH_LENGTH 65 // mm
+#define RAVE_LENGTH 30 // Max length of a rave in mm
+#define FORELEG_LENGTH 60 // Vertical distance from end of thigh to leg tip
+#define THIGH_LENGTH 65 // Horizontal distance from beginning of leg to end of thigh
 #define LEG_DISTANCE 70 // Vertical distance between separate legs in mm
-#define DELTA 115 // Horizontal distanc between robot center and leg tips
-#define X_OFFSET 50 // Horizontal distanc between robot center and yaw joint
-#define SERVOMIN  240 // This is the 'minimum' pulse length count (out of 4096)
-#define YAWMIN 370
-#define YAWMAX 490
-#define PITCHMIN 200
-#define PITCHMAX 250
-#define BENDMIN 230
-#define BENDMAX	350
-#define SERVOMAX  410 // This is the 'maximum' pulse length count (out of 4096)
+#define DELTA 115 // Horizontal distance between robot center and leg tips
+#define X_OFFSET 50 // Horizontal distance between robot center and yaw joint
+#define YAWMIN 150 // Minimum pulse length for the yaw servos
+#define YAWMAX 400 // Maximum pulse length for the yaw servos
+#define PITCHMIN 200 // Minimum pulse length for the pitch servos
+#define PITCHMAX 250 // Maximum pulse length for the pitch servos
+#define BENDMIN 250 // Minimum pulse length for the bend servos
+#define BENDMAX	420 // Maximum pulse length for the bend servos
+#define PITCH_STEP (PITCHMAX-PITCHMIN) / ((STEP_LENGTH)/2) // Constant for pitch calculations while stepping
+#define PITCH_RAVE (PITCHMAX-PITCHMIN) / ((RAVE_LENGTH)/2) // Constant for pitch calculations while raving
 #define SERVO_FREQ 50 // Analog servos run at ~50 Hz updates
-#define PITCH_SCALER 1.5
-
-#define PUT_DOWN 0
-#define PROPEL 1
-#define LIFT_UP 2
+#define PITCHSTART_LEFT 200
+#define PITCHSTART_RIGHT 250
+#define PUT_DOWN 0 // Leg is being pitched down to the beginning of a step
+#define PROPEL 1 // Leg is moving along a line on the ground to move forward
+#define LIFT_UP 2 // Leg is being pitched up to the half point of beginning of a step
 
 // #include <Arduino.h>
 #include <stdio.h>
@@ -36,30 +34,34 @@
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
 
-uint8_t isright = 1; // Variable for prioritizing left or right side in a step (1 = true, 0 = false)
-uint8_t L_step_state = LIFT_UP; // 0,1,2
-uint8_t R_step_state = PROPEL; // 0,1,2
+uint8_t isright = 0; // Variable for prioritizing left or right side in a step (1 = right, 0 = left)
+uint8_t L_step_state = PROPEL; // 0,1,2
+uint8_t R_step_state = LIFT_UP; // 0,1,2
+uint8_t raving = 0; // Variable for whether Gort. is raving or not. 0 = not raving, 1 = raving
+uint8_t timer_overflow = 0;
 
-
-int timer_overflow = 0;
+int rave_state = 1;
 int neg; // Multiplication factor for turning
-int turning = -1; // Whether Gort. is turning. 0 = not, 1 = left, -1 = right
-int forward = -1; // Whether Gort. is moving forwards (1) or backwards (-1)
+int side; // Multiplication factor for inverting legs. -1 = right, 1 = left
+int turning = 1; // Which direction Gort. is turning. 1 = left, -1 = right
+int forward = 1; // Whether Gort. is moving forwards (1) or backwards (-1)
 
-float speed = 15; // Walking speed in mm/s
-float step_distance = 0; // Distance Gort. has traveled since the start of the step
-float R = 1000; // Turning radius in mm
-float phi;
+float speed = 40; // Walking speed in mm/s
+float step_distance; // Distance Gort. has traveled since the start of the step
+float rave_distance = 0; // Distance Gort. has raved since the start of the rave
+float R = 2000000; // Turning radius in mm. Extremely large when walking straight
+float phi; // Angle between beginning and end of the body during a step
 
-float pitch[6]; // Motor step_distances for pitch (up down shoulder motion)
-float yaw[6]; // Motor step_distances for yaw (forward and back)
-float bend[6]; // Motor step_distances for bending the knee
+float pitch[6]; // Motor step_distances for pitch (up down shoulder motion) in pulse length
+float yaw[6]; // Motor step_distances for yaw (forward and back) in radian
+float bend[6]; // Motor step_distances for bending the knee in radian
 
-int leg_pos_x[2] = {-X_OFFSET, X_OFFSET};
-int leg_pos_y[6] = {LEG_DISTANCE, 0, -LEG_DISTANCE};
+int leg_pos_x[2] = {-X_OFFSET, X_OFFSET}; // Leg x-positions relative to the center of the robot. Legs 0,2,4 and 1,3,5 respectively
+int leg_pos_y[6] = {LEG_DISTANCE, 0, -LEG_DISTANCE}; // Leg y-positions relative to the center of the robot. Legs 0,3 and 1,4 and 2,5 respectively
 
 void calculate(void);
 void actuate(void);
+void rave(void);
 
 void leg_back(uint8_t);
 void propel(uint8_t);
@@ -67,55 +69,67 @@ void propel(uint8_t);
 
 void setup(){
 	Serial.begin(9600);
-	Serial.println("8 channel Servo test!");
+	// Serial.println("8 channel Servo test!");
+	Serial.begin(9600);
+	// Serial.println("8 channel Servo test!");
 
 	pwm.begin();
-	
+
 	pwm.setOscillatorFrequency(27000000);
 	pwm.setPWMFreq(SERVO_FREQ);  // Analog servos run at ~50 Hz updates
 
-  	delay(10);
-  
-  
-  	TCCR2B |= (1 << CS22) | (1<< CS21) | (1 << CS20); // Set prescaler to 1024 and start Timer2
-  	TIMSK2 |= (1 << TOIE2); // Overflow interrupt enable
-	speed *= forward;
-
-	UBRR0H = (uint8_t)(BAUD_PRESCALER>>8);
-	UBRR0L = (uint8_t)(BAUD_PRESCALER);
-	UCSR0B |= (1 << RXCIE0) | (1 << RXEN0); // RX receibe interrupt enable and RX receive enable
-
-	UCSR0C = (1 << UCSZ01) | (1<<UCSZ00); /* 8-bit data, no parity*/
-	UCSR0B = (1 << RXEN0) | (1 << TXEN0);   /* Enable RX and TX */
+	delay(10);
 
 
-	sei(); // Enable global interrupts
+	TCCR2B |= (1 << CS22) | (1<< CS21) | (1 << CS20); // Set prescaler to 1024 and start Timer2
+	TIMSK2 |= (1 << TOIE2); // Overflow interrupt enable
+	if(raving) speed = abs(speed);
+	if(speed > 0) step_distance = 0;
+	else{
+		step_distance = STEP_LENGTH;
+		forward = -1;
+	}
+
+	if(!raving){
+		for(int m=0;m<3;m++) pitch[m] = PITCHSTART_LEFT;
+		for(int n=3;n<6;n++) pitch[n] = PITCHSTART_RIGHT;
+	}
+	if(raving){
+		for(int o=0;o<6;o++) yaw[o] = 0;
+	}
 }
 
 void loop(){
-  	// if(speed < 0) forward = -1;
-  	// else forward = 1;
 	// Motors are grouped by function, not leg
-	float time_elapsed = (TCNT2 + timer_overflow*1024)*0.000064; // Load time elapsed since last calculation (accounting for overflow by addig the max value of Timer0 timer_overflow times)
+	float time_elapsed = (TCNT2 + timer_overflow*256)*0.000064; // Load time elapsed since last calculation (accounting for overflow by addig the max value of Timer0 timer_overflow times)
 	timer_overflow = 0;
 	float distance_to_actuate = speed*time_elapsed; // Calculate distance to reach before next calculation (in mm)
 	step_distance += distance_to_actuate; // Update step_distance
+	rave_distance += distance_to_actuate;
 	// Serial.print("stepdist: ");
 	// Serial.print(step_distance);
-
-	if((abs(step_distance)) >= STEP_LENGTH) {
+	
+	if((step_distance) >= STEP_LENGTH || step_distance < 0) {
 		isright ^= 1; // Toggle side
 		L_step_state++;
 		R_step_state++;
-		step_distance = 0;
+		if(speed > 0) step_distance = 0;
+		else step_distance = STEP_LENGTH;
+	}
+	if(rave_distance >= RAVE_LENGTH){
+		rave_distance = 0;
+		rave_state *= -1;
 	}
 
-	calculate();
-	actuate();
-
+	if(!raving){
+		calculate();
+		actuate();
+	}
+	else{
+		rave();
+		actuate();
+	}
 	TCCR2B |= (1 << CS22) | (1<< CS21) | (1 << CS20); // Restart Timer0
-    // }
-
 }
 
 void calculate(void){
@@ -129,55 +143,14 @@ void calculate(void){
 		if(L_step_state == LIFT_UP) (L_step_state = PUT_DOWN);
 		if(R_step_state == LIFT_UP) (R_step_state = PUT_DOWN);
 	}
-
-	// Serial.print("L_step_state: ");
-	// Serial.print(L_step_state);
-	// Serial.print("     R_step_state: ");
-	// Serial.print(R_step_state);
-	// Serial.print("     step_distance: ");
-	// Serial.print(step_distance);
-	Serial.print("yaw[0]: ");
-	Serial.print(yaw[0]);
-	// Serial.print("     pitch[0]: ");
-	// Serial.print(pitch[0]);
-	// Serial.print("     bend[0]: ");
-	// Serial.print(bend[0]);
-	// Serial.print("     pitch[1]: ");
-	// Serial.println(pitch[1]);
-
-	
-	Serial.print("     yaw[1]: ");
-	Serial.print(yaw[1]);
-	Serial.print("     yaw[2]: ");
-	Serial.print(yaw[2]);
-	Serial.print("     yaw[3]: ");
-	Serial.print(yaw[3]);
-	Serial.print("     yaw[4]: ");
-	Serial.print(yaw[4]);
-	Serial.print("     yaw[5]: ");
-	Serial.println(yaw[5]);
 }
 
 void propel(uint8_t leg_number){
 
-	phi = -forward*((abs(step_distance) - (float)STEP_LENGTH/2))/R;
-	// Serial.print("phi: ");
-	// Serial.print(phi);
-
-	// //// Serial.print("     Max's thing: ");
-	// //// Serial.print(step_distance - STEP_LENGTH);
+	phi = -(step_distance - (float)STEP_LENGTH/2)/R;
 
 	if((turning < 0 && leg_number < 3) || (turning > 0 && leg_number > 2)) neg = 1;
 	else (neg = -1);
-	//// Serial.print("	neg: ");
-	//// Serial.print(neg);
-
-	// if(!turning){
-	// 	yaw[leg_number] = atan((step_distance - (float)STEP_LENGTH/2)/(float)THIGH_LENGTH); // Start with negative values
-
-	// 	float bend_offset = cos(yaw[leg_number])*FORELEG_LENGTH - 43.3013; // cos(yaw[leg_number])*LEG_LENGTH - cos(0.52)*LEG_LENGTH
-	// 	bend[leg_number] = asin(bend_offset/FORELEG_LENGTH); // Random scaler
-	// }
 
 	float alpha; // Leg-specific turning angle in radian|
 	float r;
@@ -186,118 +159,86 @@ void propel(uint8_t leg_number){
 	float leg_y; //Leg-specific y-position from origin while turning
 
 	alpha = (atan(leg_pos_y[leg_number%3]/(R + neg*DELTA)));
-	// Serial.print("	alpha: ");
-	// Serial.print(alpha);
 
 	phi += alpha;
-	// Serial.print("	phi2: ");
-	// Serial.print(phi);
 
 	if(sin(alpha)) r = abs(LEG_DISTANCE/sin(alpha));
 	else r = R + neg*DELTA;
-	// Serial.print("	r: ");
-	// Serial.print(r);
 
 	leg_x = turning*(r*cos(phi) - R*cos(phi));
-	// Serial.print("	leg_x: ");
-	// Serial.print(leg_x);
 	leg_y = r*sin(phi);
-	// Serial.print("	leg_y: ");
-	// Serial.print(leg_y);
 
-	yaw[leg_number] = atan((leg_y - leg_pos_y[leg_number%3])/(leg_x - leg_pos_x[leg_number/3]));
-	// Serial.print("	yaw[0]: ");
-	// Serial.print(yaw[leg_number]);
-	// yaw[leg_number] = atan((leg_y - 0)/(leg_x - (-DELTA)));
+	if(leg_number/3) side = -1;
+	else side = 1;
+
+	if(!raving) yaw[leg_number] = (atan((leg_y - leg_pos_y[leg_number%3])/(leg_x - leg_pos_x[leg_number/3])));
 	rho = sqrt(pow((leg_x - leg_pos_x[leg_number/3]), 2) + pow((leg_y - leg_pos_y[leg_number%3]), 2));
-	// Serial.print("	rho: ");
-	// Serial.println(rho);
 
-	bend[leg_number] = asin((rho - FORELEG_LENGTH)/FORELEG_LENGTH);
-	// //Serial.print("	bend[0]: ");
-	// //Serial.println(bend[leg_number]);
+	bend[leg_number] = asin((rho - THIGH_LENGTH)/FORELEG_LENGTH);
 
 }
 
 void leg_back(uint8_t leg_number){
 
-	phi = forward*((abs(step_distance) - (float)STEP_LENGTH/2))/R;
-	// Serial.print("phi: ");
-	// Serial.print(phi);
-
-	// //// Serial.print("     Max's thing: ");
-	// //// Serial.print(step_distance - STEP_LENGTH);
+	phi = (step_distance - (float)STEP_LENGTH/2)/R;
 
 	if((turning < 0 && leg_number < 3) || (turning > 0 && leg_number > 2)) neg = 1;
 	else (neg = -1);
-	//// Serial.print("	neg: ");
-	//// Serial.print(neg);
-
-	// if(!turning){
-	// 	yaw[leg_number] = atan((step_distance - (float)STEP_LENGTH/2)/(float)THIGH_LENGTH); // Start with negative values
-
-	// 	float bend_offset = cos(yaw[leg_number])*FORELEG_LENGTH - 43.3013; // cos(yaw[leg_number])*LEG_LENGTH - cos(0.52)*LEG_LENGTH
-	// 	bend[leg_number] = asin(bend_offset/FORELEG_LENGTH); // Random scaler
-	// }
 
 	float alpha; // Leg-specific turning angle in radian|
 	float r;
-	float rho;
 	float leg_x; //Leg-specific x-position from origin while turning
 	float leg_y; //Leg-specific y-position from origin while turning
 
 	alpha = (atan(leg_pos_y[leg_number%3]/(R + neg*DELTA)));
-	// Serial.print("	alpha: ");
-	// Serial.print(alpha);
-
+	
 	phi += alpha;
-	// Serial.print("	phi2: ");
-	// Serial.print(phi);
 
 	if(sin(alpha)) r = abs(LEG_DISTANCE/sin(alpha));
 	else r = R + neg*DELTA;
-	// Serial.print("	r: ");
-	// Serial.print(r);
 
 	leg_x = turning*(r*cos(phi) - R*cos(phi));
-	// Serial.print("	leg_x: ");
-	// Serial.print(leg_x);
 	leg_y = r*sin(phi);
-	// Serial.print("	leg_y: ");
-	// Serial.print(leg_y);
 
-	yaw[leg_number] = atan((leg_y - leg_pos_y[leg_number%3])/(leg_x - leg_pos_x[leg_number/3]));
-	// Serial.print("	yaw[0]: ");
-	// Serial.print(yaw[leg_number]);
-	// yaw[leg_number] = atan((leg_y - 0)/(leg_x - (-DELTA)));
-	rho = sqrt(pow((leg_x - leg_pos_x[leg_number/3]), 2) + pow((leg_y - leg_pos_y[leg_number%3]), 2));
-	// Serial.print("	rho: ");
-	// Serial.println(rho);
+	if(leg_number/3) side = -1;
+	else side = 1;
 
-	bend[leg_number] = asin((rho - FORELEG_LENGTH)/FORELEG_LENGTH);
-	// //Serial.print("	bend[0]: ");
-	// //Serial.println(bend[leg_number]);
+	if(!raving) yaw[leg_number] = (atan((leg_y - leg_pos_y[leg_number%3])/(leg_x - leg_pos_x[leg_number/3])));
 
-	if(((L_step_state == LIFT_UP) && !(leg_number%2)) || ((R_step_state == LIFT_UP) && (leg_number%2))){ // Lift up
-		pitch[leg_number] = (-(float)PITCH_SCALER)*yaw[leg_number]; // Random scaler
+	if((((L_step_state == LIFT_UP) || (L_step_state == PUT_DOWN)) && !(leg_number%2)) || (((R_step_state == LIFT_UP) || (R_step_state == PUT_DOWN)) && (leg_number%2))){ // Lift up
+		if(side == 1) pitch[leg_number] = PITCHMIN + (abs(step_distance - (float)STEP_LENGTH/2) * PITCH_STEP);
+		else pitch[leg_number] = PITCHMAX - (abs(step_distance - (float)STEP_LENGTH/2) * PITCH_STEP);
 	}
-	else pitch[leg_number] = (float)PITCH_SCALER*yaw[leg_number]; // Put down
 }
 
 void actuate(void){
-	float pitch_pulse[6];
-
+	uint8_t shift = 0;
 	for(int j=0; j<6; j++){
 		yaw[j] = yaw[j]*(YAWMAX - YAWMIN)/(60*PI/180) + (float)(YAWMAX+YAWMIN)/2; // Range: -40°, 30°
-		pitch_pulse[j] = pitch[j]*(PITCHMAX - PITCHMIN)/((0-20)*PI/180) + PITCHMIN;
-		bend[j] = bend[j]*(BENDMAX - BENDMIN)/((15+20)*PI/180) + BENDMIN; // Range: -60°, 25°
+		bend[j] = bend[j]*(BENDMAX - BENDMIN)/(35*PI/180) + (float)(BENDMIN+BENDMAX)/2; // Range: -60°, 25°
+
+		if((yaw[j] < YAWMAX) && (yaw[j] > YAWMIN)) pwm.setPWM((3*j)-shift, 0, yaw[j]);
+		if((pitch[j] < PITCHMAX) && (pitch[j] > PITCHMIN)){
+			if(j == 2){
+				pwm.setPWM(1, 0, pitch[j]);
+				shift++;
+			}
+			else if(j == 5){
+				pwm.setPWM(9, 0, pitch[j]);
+				shift++;
+			}
+			else pwm.setPWM((3*j+1)-shift, 0, pitch[j]);
+		if((bend[j] < BENDMAX) && (bend[j] > BENDMIN)) pwm.setPWM((3*j+2)-shift, 0, bend[j]);
+		}
 	}
-	for(int k=0; k<5; k++){
-		if((yaw[k] < YAWMAX) && (yaw[k] > YAWMIN)) pwm.setPWM(3*k, 0, yaw[k]);
-		if((pitch_pulse[k] < PITCHMAX) && (pitch_pulse[k] > PITCHMIN)) pwm.setPWM(3*k+1, 0, pitch_pulse[k]);
-		if((bend[k] < BENDMAX) && (bend[k] > BENDMIN)) pwm.setPWM(3*k+2, 0, bend[k]);
-	}
-  
+	shift = 0;
+}
+
+void rave(){
+	bend[0] = bend[1] = bend[2] = bend[3] = bend[4] = bend[5] = rave_state*(asin((rave_distance - RAVE_LENGTH/2)/FORELEG_LENGTH));
+	pitch[0] = pitch[1] = pitch[2] = PITCHMAX - (abs(rave_distance - (float)RAVE_LENGTH/2) * PITCH_RAVE);
+	pitch[3] = pitch[4] = pitch[5] = PITCHMIN + (abs(rave_distance - (float)RAVE_LENGTH/2) * PITCH_RAVE);
+
 }
 
 
@@ -306,6 +247,6 @@ ISR(TIMER2_OVF_vect){ // On Timer0 overflow
 }
 
 // ISR(USART_RX_vect){
-// 	volatile unsigned char received_data = UDR0;
+// 	volatile int received_data = UDR0;
 
 // }
