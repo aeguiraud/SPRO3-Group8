@@ -134,7 +134,7 @@ void loop(){
 
     // // Send back an acknowledgement
     // Serial.println("ACK: Data Received");
-    // }
+    }
 
 	// Motors are grouped by function, not leg
 	float time_elapsed = (TCNT2 + timer_overflow*1024)*0.000064; // Load time elapsed since last calculation (accounting for overflow by addig the max value of Timer0 timer_overflow times)
